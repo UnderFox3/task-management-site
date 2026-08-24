@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'TaskFlow – Kanban Task Management',
+  title: 'iTask – Kanban Task Management',
   description: 'A beautiful Trello-like kanban board for managing your tasks and projects.',
   keywords: ['task management', 'kanban', 'productivity', 'project management'],
 };

@@ -13,6 +13,6 @@ export default async function BoardPage({ params }: BoardPageProps) {
 
 export function generateMetadata() {
   return {
-    title: 'Board – TaskFlow',
+    title: 'Board – iTask',
   };
 }
