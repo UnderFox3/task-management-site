@@ -6,6 +6,7 @@ interface Props {
   card: CardType;
   columnId: string;
   onClick: () => void;
+  onToggleComplete: () => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: (e: React.DragEvent) => void;
 }
@@ -19,8 +20,13 @@ const PRIORITY_CONFIG = {
 
 function formatDate(iso: string | null): string | null {
   if (!iso) return null;
+
   const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  const hasTime = iso.includes('T') && iso.length > 10;
+  return hasTime ? `${date}, ${time}` : date;
 }
 
 function isOverdue(iso: string | null): boolean {
@@ -28,10 +34,38 @@ function isOverdue(iso: string | null): boolean {
   return new Date(iso) < new Date();
 }
 
-export default function Card({ card, onClick, onDragStart, onDragEnd }: Props) {
+function getStatus(card: CardType) {
+  if (card.completed) {
+    if (card.dueDate && isOverdue(card.dueDate)) {
+      return {
+        label: 'Done late',
+        bg: 'rgba(245, 158, 11, 0.14)',
+        color: '#f59e0b',
+      };
+    }
+
+    return {
+      label: 'Done',
+      bg: 'rgba(34, 197, 94, 0.14)',
+      color: '#22c55e',
+    };
+  }
+
+  if (card.dueDate && isOverdue(card.dueDate)) {
+    return {
+      label: 'Overdue',
+      bg: 'rgba(239, 68, 68, 0.16)',
+      color: '#ef4444',
+    };
+  }
+
+  return null;
+}
+
+export default function Card({ card, onClick, onToggleComplete, onDragStart, onDragEnd }: Props) {
   const priority = PRIORITY_CONFIG[card.priority];
-  const overdue = isOverdue(card.dueDate);
   const formatted = formatDate(card.dueDate);
+  const status = getStatus(card);
 
   return (
     <div
@@ -63,49 +97,101 @@ export default function Card({ card, onClick, onDragStart, onDragEnd }: Props) {
         el.style.boxShadow = 'none';
       }}
     >
-      {/* Priority badge */}
-      <div
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '5px',
-          padding: '2px 8px',
-          borderRadius: '20px',
-          background: priority.bg,
-          color: priority.color,
-          fontSize: '11px',
-          fontWeight: 600,
-          marginBottom: '10px',
-          letterSpacing: '0.02em',
-        }}
-      >
-        <span
-          style={{
-            width: '5px',
-            height: '5px',
-            borderRadius: '50%',
-            background: priority.color,
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
+        <button
+          type="button"
+          aria-label={card.completed ? 'Mark task as not done' : 'Mark task as done'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleComplete();
           }}
-        />
-        {priority.label}
+          style={{
+            width: '16px',
+            height: '16px',
+            borderRadius: '50%',
+            border: card.completed ? '1px solid transparent' : '1px solid var(--border-medium)',
+            background: card.completed ? '#22c55e' : 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: card.completed ? '0 0 10px rgba(34,197,94,0.35)' : 'none',
+            cursor: 'pointer',
+            flexShrink: 0,
+            marginTop: '2px',
+            color: '#fff',
+            fontSize: '10px',
+            fontWeight: 700,
+          }}
+        >
+          {card.completed ? '✓' : ''}
+        </button>
+
+        <div style={{ flex: 1 }}>
+          {/* Priority badge */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '2px 8px',
+              borderRadius: '20px',
+              background: priority.bg,
+              color: priority.color,
+              fontSize: '11px',
+              fontWeight: 600,
+              marginBottom: '10px',
+              letterSpacing: '0.02em',
+            }}
+          >
+            <span
+              style={{
+                width: '5px',
+                height: '5px',
+                borderRadius: '50%',
+                background: priority.color,
+              }}
+            />
+            {priority.label}
+          </div>
+
+          {/* Title */}
+          <p
+            style={{
+              fontSize: '14px',
+              fontWeight: 500,
+              color: card.completed ? 'var(--text-secondary)' : 'var(--text-primary)',
+              lineHeight: 1.5,
+              marginBottom: card.description || card.dueDate || status ? '10px' : '0',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              textDecoration: card.completed ? 'line-through' : 'none',
+            }}
+          >
+            {card.title}
+          </p>
+        </div>
       </div>
 
-      {/* Title */}
-      <p
-        style={{
-          fontSize: '14px',
-          fontWeight: 500,
-          color: 'var(--text-primary)',
-          lineHeight: 1.5,
-          marginBottom: card.description || card.dueDate ? '10px' : '0',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}
-      >
-        {card.title}
-      </p>
+      {status && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '3px 8px',
+            borderRadius: '999px',
+            background: status.bg,
+            color: status.color,
+            fontSize: '11px',
+            fontWeight: 700,
+            marginBottom: '10px',
+          }}
+        >
+          {status.label}
+        </div>
+      )}
 
       {/* Description snippet */}
       {card.description && (
@@ -133,7 +219,7 @@ export default function Card({ card, onClick, onDragStart, onDragEnd }: Props) {
             alignItems: 'center',
             gap: '5px',
             fontSize: '12px',
-            color: overdue ? '#ef4444' : 'var(--text-muted)',
+            color: (status && (status.label === 'Overdue' || status.label === 'Done late')) ? '#ef4444' : 'var(--text-muted)',
             marginTop: '2px',
           }}
         >
@@ -144,7 +230,7 @@ export default function Card({ card, onClick, onDragStart, onDragEnd }: Props) {
             <line x1="3" y1="10" x2="21" y2="10"/>
           </svg>
           {formatted}
-          {overdue && (
+          {status && status.label === 'Overdue' && (
             <span
               style={{
                 background: 'rgba(239,68,68,0.15)',

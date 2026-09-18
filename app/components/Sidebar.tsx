@@ -17,7 +17,7 @@ export default function Sidebar() {
     <>
       <aside
         style={{
-          width: collapsed ? '60px' : '240px',
+          width: collapsed ? '72px' : '240px',
           background: 'var(--bg-sidebar)',
           borderRight: '1px solid var(--border-subtle)',
           display: 'flex',
@@ -34,11 +34,14 @@ export default function Sidebar() {
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: '20px 16px 16px',
+            flexDirection: collapsed ? 'column' : 'row',
+            alignItems: collapsed ? 'center' : 'center',
+            gap: collapsed ? '12px' : '10px',
+            padding: collapsed ? '12px 8px 10px' : '20px 16px 16px',
             borderBottom: '1px solid var(--border-subtle)',
             flexShrink: 0,
+            position: 'relative',
+            justifyContent: collapsed ? 'center' : 'flex-start',
           }}
         >
           {/* Logo mark */}
@@ -74,28 +77,52 @@ export default function Sidebar() {
             </span>
           )}
           <button
+            type="button"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
             onClick={() => setCollapsed((c) => !c)}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             style={{
-              marginLeft: 'auto',
-              background: 'none',
-              border: 'none',
+              position: 'static',
+              marginLeft: collapsed ? '0' : 'auto',
+              background: collapsed ? 'var(--bg-sidebar)' : 'none',
+              border: collapsed ? '1px solid var(--border-medium)' : 'none',
+              boxShadow: collapsed ? '0 8px 18px rgba(15, 23, 42, 0.35)' : 'none',
               cursor: 'pointer',
               color: 'var(--text-muted)',
-              padding: '4px',
-              borderRadius: '6px',
+              padding: '6px',
+              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               flexShrink: 0,
-              transition: 'color 0.15s ease, background 0.15s ease',
+              transition: 'color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
+              zIndex: 2,
+              width: collapsed ? '28px' : 'auto',
+              height: collapsed ? '28px' : 'auto',
+              outline: 'none',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
-              (e.currentTarget as HTMLButtonElement).style.background = 'var(--border-subtle)';
+              const target = e.currentTarget as HTMLButtonElement;
+              target.style.color = 'var(--text-primary)';
+              target.style.background = collapsed ? 'rgba(124,58,237,0.12)' : 'var(--border-subtle)';
+              target.style.borderColor = collapsed ? 'var(--accent-500)' : 'transparent';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)';
-              (e.currentTarget as HTMLButtonElement).style.background = 'none';
+              const target = e.currentTarget as HTMLButtonElement;
+              target.style.color = 'var(--text-muted)';
+              target.style.background = collapsed ? 'var(--bg-sidebar)' : 'none';
+              target.style.borderColor = collapsed ? 'var(--border-medium)' : 'transparent';
+            }}
+            onFocus={(e) => {
+              const target = e.currentTarget as HTMLButtonElement;
+              target.style.outline = '2px solid var(--accent-300)';
+              target.style.outlineOffset = '2px';
+            }}
+            onBlur={(e) => {
+              const target = e.currentTarget as HTMLButtonElement;
+              target.style.outline = 'none';
+              target.style.outlineOffset = '0';
             }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

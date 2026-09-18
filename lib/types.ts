@@ -6,6 +6,7 @@ export interface Card {
   description: string;
   priority: Priority;
   dueDate: string | null; // ISO date string or null
+  completed: boolean;
   createdAt: string;
 }
 

@@ -4,26 +4,26 @@ import { useRef, useState } from 'react';
 import type { Card } from '@/lib/types';
 import { useBoardContext } from '@/app/providers/BoardProvider';
 import CardComponent from './Card';
-import CardModal from './CardModal';
 
 interface Props {
   boardId: string;
   columnId: string;
+  index: number;
+  onOpenCard: (card: Card) => void;
+  onOpenCreate: (columnId: string) => void;
+  onDragStartColumn: (e: React.DragEvent, columnId: string) => void;
+  onDropColumn: (e: React.DragEvent, targetIndex: number) => void;
 }
 
-export default function Column({ boardId, columnId }: Props) {
-  const { state, addCard, updateColumn, deleteColumn, moveCard } = useBoardContext();
+export default function Column({ boardId, columnId, index, onOpenCard, onOpenCreate, onDragStartColumn, onDropColumn }: Props) {
+  const { state, updateColumn, deleteColumn, moveCard, updateCard } = useBoardContext();
   const column = state.columns[columnId];
 
-  const [isEditingTitle, setIsEditingTitle]   = useState(false);
-  const [titleDraft, setTitleDraft]           = useState(column?.title ?? '');
-  const [isAddingCard, setIsAddingCard]       = useState(false);
-  const [newCardTitle, setNewCardTitle]       = useState('');
-  const [selectedCard, setSelectedCard]       = useState<Card | null>(null);
-  const [isDragOver, setIsDragOver]           = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(column?.title ?? '');
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const dragCardRef = useRef<{ cardId: string; fromColumnId: string } | null>(null);
-  const addInputRef = useRef<HTMLInputElement>(null);
 
   if (!column) return null;
 
@@ -38,22 +38,13 @@ export default function Column({ boardId, columnId }: Props) {
     setIsEditingTitle(false);
   }
 
-  // ── Add Card ───────────────────────────────────────────────────────────────
-
-  function submitCard() {
-    if (newCardTitle.trim()) {
-      addCard(columnId, newCardTitle.trim());
-      setNewCardTitle('');
-    }
-    setIsAddingCard(false);
-  }
-
   // ── Drag & Drop ────────────────────────────────────────────────────────────
 
   function handleCardDragStart(e: React.DragEvent, cardId: string) {
     dragCardRef.current = { cardId, fromColumnId: columnId };
+    e.stopPropagation();
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', JSON.stringify({ cardId, fromColumnId: columnId }));
+    e.dataTransfer.setData('application/x-task-card', JSON.stringify({ cardId, fromColumnId: columnId }));
     // slight visual delay so the ghost shows the card first
     setTimeout(() => {
       (e.target as HTMLElement).style.opacity = '0.4';
@@ -77,9 +68,12 @@ export default function Column({ boardId, columnId }: Props) {
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(false);
     try {
-      const { cardId, fromColumnId } = JSON.parse(e.dataTransfer.getData('text/plain'));
+      const payload = e.dataTransfer.getData('application/x-task-card');
+      if (!payload) return;
+      const { cardId, fromColumnId } = JSON.parse(payload);
       // Drop at end of column
       moveCard(cardId, fromColumnId, columnId, cards.length);
     } catch {
@@ -92,7 +86,9 @@ export default function Column({ boardId, columnId }: Props) {
     e.stopPropagation();
     setIsDragOver(false);
     try {
-      const { cardId, fromColumnId } = JSON.parse(e.dataTransfer.getData('text/plain'));
+      const payload = e.dataTransfer.getData('application/x-task-card');
+      if (!payload) return;
+      const { cardId, fromColumnId } = JSON.parse(payload);
       moveCard(cardId, fromColumnId, columnId, targetIndex);
     } catch {
       // ignore
@@ -102,6 +98,24 @@ export default function Column({ boardId, columnId }: Props) {
   return (
     <>
       <div
+        draggable
+        onDragStart={(e) => {
+          e.stopPropagation();
+          onDragStartColumn(e, columnId);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'move';
+          handleDragOver(e);
+        }}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDropColumn(e, index);
+          handleDrop(e);
+        }}
         style={{
           width: '288px',
           minWidth: '288px',
@@ -113,10 +127,8 @@ export default function Column({ boardId, columnId }: Props) {
           maxHeight: 'calc(100dvh - 96px)',
           transition: 'background 0.15s ease, border-color 0.15s ease',
           flexShrink: 0,
+          cursor: 'grab',
         }}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
       >
         {/* ── Column Header ── */}
         <div
@@ -237,7 +249,10 @@ export default function Column({ boardId, columnId }: Props) {
               <CardComponent
                 card={card}
                 columnId={columnId}
-                onClick={() => setSelectedCard(card)}
+                onClick={() => onOpenCard(card)}
+                onToggleComplete={() => {
+                  updateCard(card.id, { completed: !card.completed });
+                }}
                 onDragStart={(e) => handleCardDragStart(e, card.id)}
                 onDragEnd={handleCardDragEnd}
               />
@@ -265,110 +280,43 @@ export default function Column({ boardId, columnId }: Props) {
 
         {/* ── Add Card ── */}
         <div style={{ padding: '6px 10px 10px', flexShrink: 0 }}>
-          {isAddingCard ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <input
-                ref={addInputRef}
-                autoFocus
-                placeholder="Card title…"
-                value={newCardTitle}
-                onChange={(e) => setNewCardTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') submitCard();
-                  if (e.key === 'Escape') { setIsAddingCard(false); setNewCardTitle(''); }
-                }}
-                style={{
-                  width: '100%',
-                  padding: '9px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--accent-500)',
-                  background: 'var(--bg-input)',
-                  color: 'var(--text-primary)',
-                  fontSize: '14px',
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
-              />
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  onClick={submitCard}
-                  style={{
-                    flex: 1,
-                    padding: '7px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: 'var(--accent-500)',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                  }}
-                >
-                  Add
-                </button>
-                <button
-                  onClick={() => { setIsAddingCard(false); setNewCardTitle(''); }}
-                  style={{
-                    flex: 1,
-                    padding: '7px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-medium)',
-                    background: 'none',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsAddingCard(true)}
-              style={{
-                width: '100%',
-                padding: '8px',
-                borderRadius: '10px',
-                border: '1px dashed var(--border-medium)',
-                background: 'none',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-500)';
-                (e.currentTarget as HTMLElement).style.color = 'var(--accent-300)';
-                (e.currentTarget as HTMLElement).style.background = 'rgba(124,58,237,0.06)';
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-medium)';
-                (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
-                (e.currentTarget as HTMLElement).style.background = 'none';
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Add a card
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => onOpenCreate(columnId)}
+            style={{
+              width: '100%',
+              padding: '8px',
+              borderRadius: '10px',
+              border: '1px dashed var(--border-medium)',
+              background: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-500)';
+              (e.currentTarget as HTMLElement).style.color = 'var(--accent-300)';
+              (e.currentTarget as HTMLElement).style.background = 'rgba(124,58,237,0.06)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-medium)';
+              (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+              (e.currentTarget as HTMLElement).style.background = 'none';
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add a card
+          </button>
         </div>
       </div>
 
-      {/* Card detail modal */}
-      {selectedCard && (
-        <CardModal
-          card={selectedCard}
-          columnId={columnId}
-          onClose={() => setSelectedCard(null)}
-        />
-      )}
     </>
   );
 }

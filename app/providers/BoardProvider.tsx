@@ -23,10 +23,11 @@ interface BoardContextValue {
   updateColumn: (columnId: string, title: string) => void;
   deleteColumn: (boardId: string, columnId: string) => void;
   // Card operations
-  addCard: (columnId: string, title: string) => void;
+  addCard: (columnId: string, title: string) => string;
   updateCard: (cardId: string, changes: Partial<Omit<Card, 'id' | 'createdAt'>>) => void;
   deleteCard: (columnId: string, cardId: string) => void;
   // Drag & Drop
+  moveColumn: (boardId: string, fromColumnId: string, toIndex: number) => void;
   moveCard: (cardId: string, fromColumnId: string, toColumnId: string, toIndex: number) => void;
 }
 
@@ -43,6 +44,7 @@ type Action =
   | { type: 'ADD_CARD'; columnId: string; card: Card }
   | { type: 'UPDATE_CARD'; cardId: string; changes: Partial<Card> }
   | { type: 'DELETE_CARD'; columnId: string; cardId: string }
+  | { type: 'MOVE_COLUMN'; boardId: string; fromColumnId: string; toIndex: number }
   | { type: 'MOVE_CARD'; cardId: string; fromColumnId: string; toColumnId: string; toIndex: number };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -180,6 +182,27 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case 'MOVE_COLUMN': {
+      const { boardId, fromColumnId, toIndex } = action;
+      const board = state.boards[boardId];
+      if (!board) return state;
+
+      const currentIndex = board.columnIds.indexOf(fromColumnId);
+      if (currentIndex === -1) return state;
+
+      const nextColumnIds = [...board.columnIds];
+      const [moved] = nextColumnIds.splice(currentIndex, 1);
+      nextColumnIds.splice(toIndex, 0, moved);
+
+      return {
+        ...state,
+        boards: {
+          ...state.boards,
+          [boardId]: { ...board, columnIds: nextColumnIds },
+        },
+      };
+    }
+
     case 'MOVE_CARD': {
       const { cardId, fromColumnId, toColumnId, toIndex } = action;
       const fromCol = state.columns[fromColumnId];
@@ -271,9 +294,11 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       description: '',
       priority: 'medium' as Priority,
       dueDate: null,
+      completed: false,
       createdAt: new Date().toISOString(),
     };
     dispatch({ type: 'ADD_CARD', columnId, card });
+    return card.id;
   }, []);
 
   const updateCard = useCallback(
@@ -285,6 +310,10 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
 
   const deleteCard = useCallback((columnId: string, cardId: string) => {
     dispatch({ type: 'DELETE_CARD', columnId, cardId });
+  }, []);
+
+  const moveColumn = useCallback((boardId: string, fromColumnId: string, toIndex: number) => {
+    dispatch({ type: 'MOVE_COLUMN', boardId, fromColumnId, toIndex });
   }, []);
 
   const moveCard = useCallback(
@@ -309,6 +338,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         addCard,
         updateCard,
         deleteCard,
+        moveColumn,
         moveCard,
       }}
     >
