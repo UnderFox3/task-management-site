@@ -17,13 +17,36 @@ const PRIORITIES: { value: Priority; label: string; color: string }[] = [
   { value: 'urgent', label: 'Urgent', color: '#ec4899' },
 ];
 
+function toDateTimeLocalValue(value: string | null): string {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function toIsoDateTime(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export default function CardModal({ card, columnId, onClose }: Props) {
   const { updateCard, deleteCard } = useBoardContext();
 
   const [title, setTitle]       = useState(card.title);
   const [description, setDesc]  = useState(card.description);
   const [priority, setPriority] = useState<Priority>(card.priority);
-  const [dueDate, setDueDate]   = useState(card.dueDate ?? '');
+  const [dueDate, setDueDate]   = useState(toDateTimeLocalValue(card.dueDate));
+  const [completed, setCompleted] = useState(Boolean(card.completed));
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
@@ -44,7 +67,8 @@ export default function CardModal({ card, columnId, onClose }: Props) {
       title: title.trim() || card.title,
       description,
       priority,
-      dueDate: dueDate || null,
+      dueDate: toIsoDateTime(dueDate),
+      completed,
     });
     onClose();
   }
@@ -63,30 +87,37 @@ export default function CardModal({ card, columnId, onClose }: Props) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 100,
-        padding: '16px',
+        zIndex: 2000,
+        padding: '96px 24px 24px',
+        overflowY: 'auto',
       }}
       className="animate-overlay-in"
-      onClick={save}
+      onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="card-modal-title"
         style={{
           background: 'var(--bg-modal)',
           border: '1px solid var(--border-medium)',
-          borderRadius: '20px',
-          padding: '32px',
-          width: '520px',
+          borderRadius: '24px',
+          padding: '28px 28px 24px',
+          width: 'min(700px, calc(100vw - 32px))',
           maxWidth: '100%',
-          maxHeight: '90dvh',
+          maxHeight: 'calc(100dvh - 120px)',
           overflowY: 'auto',
           boxShadow: 'var(--shadow-modal)',
+          position: 'relative',
+          zIndex: 1,
+          margin: 'auto',
         }}
         className="animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px', gap: '12px' }}>
-          <h2 style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', paddingTop: '4px' }}>
+          <h2 id="card-modal-title" style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', paddingTop: '4px' }}>
             Edit Card
           </h2>
           <button
@@ -125,6 +156,46 @@ export default function CardModal({ card, columnId, onClose }: Props) {
           />
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', padding: '8px 0' }}>
+          <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+            Completion
+          </label>
+          <button
+            type="button"
+            onClick={() => setCompleted((v) => !v)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              border: '1px solid var(--border-medium)',
+              background: completed ? 'rgba(34,197,94,0.14)' : 'transparent',
+              color: completed ? '#22c55e' : 'var(--text-secondary)',
+              borderRadius: '999px',
+              padding: '7px 12px',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            <span
+              style={{
+                width: '14px',
+                height: '14px',
+                borderRadius: '50%',
+                background: completed ? '#22c55e' : 'transparent',
+                border: completed ? '1px solid transparent' : '1px solid var(--border-medium)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: '10px',
+              }}
+            >
+              {completed ? '✓' : ''}
+            </span>
+            {completed ? 'Done' : 'Not done'}
+          </button>
+        </div>
+
         {/* ── Description ── */}
         <div style={{ marginBottom: '20px' }}>
           <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
@@ -156,7 +227,7 @@ export default function CardModal({ card, columnId, onClose }: Props) {
         </div>
 
         {/* ── Priority + Due Date ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '28px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '18px', marginBottom: '28px' }}>
           {/* Priority */}
           <div>
             <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
@@ -197,7 +268,7 @@ export default function CardModal({ card, columnId, onClose }: Props) {
             </label>
             <input
               id="card-due-date-input"
-              type="date"
+              type="datetime-local"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               style={{
