@@ -1,9 +1,29 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "taskflow-app",
-  "compatibility_date": "2026-08-21",
+  "name": "task-management-site",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-18",
   "compatibility_flags": [
-    "nodejs_compat"
+    "nodejs_compat",
+    "global_fetch_strictly_public"
   ],
-  "pages_build_output_dir": ".next"
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "task-management-site"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "task-management-site-opennext-cache"
+    }
+  ],
+  "images": {
+    "binding": "IMAGES"
+  }
 }
