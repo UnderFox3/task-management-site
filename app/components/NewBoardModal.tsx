@@ -18,11 +18,12 @@ export default function NewBoardModal({ onClose }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [accent, setAccent] = useState(ACCENT_COLOURS[0]);
+  const [visibility, setVisibility] = useState<'public' | 'private'>('private');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    const boardId = addBoard(title.trim(), accent);
+    const boardId = addBoard(title.trim(), accent, visibility);
     onClose();
     router.push(`/board/${boardId}`);
   }
@@ -86,7 +87,7 @@ export default function NewBoardModal({ onClose }: Props) {
           </label>
 
           {/* Accent colour */}
-          <div style={{ marginBottom: '28px' }}>
+          <div style={{ marginBottom: '20px' }}>
             <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '10px' }}>
               Accent Colour
             </span>
@@ -109,6 +110,33 @@ export default function NewBoardModal({ onClose }: Props) {
                     transform: accent === colour ? 'scale(1.15)' : 'scale(1)',
                   }}
                 />
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '28px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '10px' }}>
+              Board Visibility
+            </span>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {(['public', 'private'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setVisibility(option)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: visibility === option ? '1px solid var(--accent-500)' : '1px solid var(--border-medium)',
+                    background: visibility === option ? 'rgba(124,58,237,0.12)' : 'transparent',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  {option === 'public' ? 'Public' : 'Private'}
+                </button>
               ))}
             </div>
           </div>

@@ -336,7 +336,7 @@ interface Props {
 }
 
 export default function BoardView({ boardId }: Props) {
-  const { state, addColumn, updateBoard, moveColumn } = useBoardContext();
+  const { state, addColumn, updateBoard, moveColumn, inviteUserToBoard, currentUser, canManageBoard } = useBoardContext();
   const board = state.boards[boardId];
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -345,6 +345,9 @@ export default function BoardView({ boardId }: Props) {
   const [newColTitle, setNewColTitle]       = useState('');
   const [selectedCard, setSelectedCard]     = useState<{ card: Card; columnId: string } | null>(null);
   const [createCardState, setCreateCardState] = useState<{ columnId: string } | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer');
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
 
   if (!board) {
     return (
@@ -494,7 +497,7 @@ export default function BoardView({ boardId }: Props) {
         )}
 
         {/* Card count summary */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {board.columnIds.map((colId) => {
             const col = state.columns[colId];
             if (!col) return null;
@@ -505,8 +508,46 @@ export default function BoardView({ boardId }: Props) {
               </span>
             );
           })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-medium)', borderRadius: '999px', padding: '6px 10px', color: 'var(--text-secondary)', fontSize: '12px' }}>
+            <span style={{ width: '8px', height: '8px', background: board.visibility === 'public' ? '#22c55e' : '#f59e0b', borderRadius: '50%' }} />
+            {board.visibility === 'public' ? 'Public' : 'Private'}
+          </div>
         </div>
       </header>
+
+      {canManageBoard(boardId, 'owner') && board.visibility === 'private' && (
+        <div style={{ borderBottom: '1px solid var(--border-subtle)', padding: '14px 28px 18px', background: 'var(--bg-base)' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="Invite by email"
+              style={{ flex: '1 1 220px', minWidth: 180, padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-medium)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+            />
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value as 'editor' | 'viewer')}
+              style={{ padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-medium)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+            >
+              <option value="editor">Editor</option>
+              <option value="viewer">Viewer</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                const result = inviteUserToBoard(boardId, inviteEmail, inviteRole);
+                setInviteMessage(result.message);
+                if (result.success) setInviteEmail('');
+              }}
+              style={{ padding: '9px 14px', borderRadius: '10px', border: 'none', background: 'var(--accent-500)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Invite
+            </button>
+          </div>
+          {inviteMessage && <div style={{ marginTop: '10px', color: 'var(--text-secondary)', fontSize: '13px' }}>{inviteMessage}</div>}
+        </div>
+      )}
 
       {/* ── Columns Area ── */}
       <div

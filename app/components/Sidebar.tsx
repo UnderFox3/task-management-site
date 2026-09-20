@@ -7,11 +7,18 @@ import { useBoardContext } from '@/app/providers/BoardProvider';
 import NewBoardModal from './NewBoardModal';
 
 export default function Sidebar() {
-  const { state, deleteBoard } = useBoardContext();
+  const { state, deleteBoard, currentUser, logout } = useBoardContext();
   const pathname = usePathname();
   const [showNewBoard, setShowNewBoard] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const visibleBoards = state.boardOrder.filter((boardId) => {
+    const board = state.boards[boardId];
+    if (!board) return false;
+    if (board.ownerId === currentUser?.id) return true;
+    if (board.members[currentUser?.id ?? '']) return true;
+    return false;
+  });
 
   return (
     <>
@@ -134,7 +141,64 @@ export default function Sidebar() {
           </button>
         </div>
 
-        {/* ── Boards Label ── */}
+        {!collapsed && (
+          <div
+            style={{
+              padding: '16px 16px 8px',
+              fontSize: '11px',
+              fontWeight: 600,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+              flexShrink: 0,
+            }}
+          >
+            User
+          </div>
+        )}
+
+        {!collapsed && currentUser && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '8px',
+              margin: '0 8px 10px',
+              padding: '10px 10px',
+              borderRadius: '10px',
+              background: 'rgba(124,58,237,0.08)',
+              border: '1px solid rgba(124,58,237,0.18)',
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {currentUser.username}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {currentUser.email}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              title="Sign out"
+              style={{
+                border: '1px solid var(--border-medium)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                borderRadius: '8px',
+                padding: '6px 8px',
+                cursor: 'pointer',
+                fontSize: '11px',
+                fontWeight: 600,
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        )}
+
         {!collapsed && (
           <div
             style={{
@@ -159,7 +223,7 @@ export default function Sidebar() {
             padding: '0 8px',
           }}
         >
-          {state.boardOrder.map((boardId) => {
+          {visibleBoards.map((boardId) => {
             const board = state.boards[boardId];
             if (!board) return null;
             const isActive = pathname === `/board/${boardId}`;
