@@ -130,82 +130,7 @@ function getInitialSeed(): AppState {
 let dbInstance: any = null;
 
 function getSqliteDb() {
-  if (dbInstance) return dbInstance;
-
-  try {
-    // Dynamic require for node:sqlite
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { DatabaseSync } = require('node:sqlite');
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    const db = new DatabaseSync(DB_PATH);
-
-    // Create tables
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        email TEXT UNIQUE,
-        username TEXT,
-        password_hash TEXT,
-        created_at TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS boards (
-        id TEXT PRIMARY KEY,
-        title TEXT,
-        accent TEXT,
-        owner_id TEXT,
-        visibility TEXT,
-        column_ids TEXT,
-        created_at TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS board_members (
-        board_id TEXT,
-        user_id TEXT,
-        role TEXT,
-        invited_at TEXT,
-        PRIMARY KEY (board_id, user_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS columns (
-        id TEXT PRIMARY KEY,
-        board_id TEXT,
-        title TEXT,
-        card_ids TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS cards (
-        id TEXT PRIMARY KEY,
-        column_id TEXT,
-        title TEXT,
-        description TEXT,
-        priority TEXT,
-        due_date TEXT,
-        completed INTEGER,
-        created_at TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS app_meta (
-        key TEXT PRIMARY KEY,
-        val TEXT
-      );
-    `);
-
-    // Check if initial users exist, seed if not
-    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
-    if (userCount.count === 0) {
-      const seed = getInitialSeed();
-      syncStateToDb(db, seed);
-    }
-
-    dbInstance = db;
-    return dbInstance;
-  } catch (err) {
-    console.warn('SQLite initialization failed, falling back to memory state:', err);
-    return null;
-  }
+ return null; // Placeholder for SQLite database connection logic
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -273,179 +198,29 @@ function syncStateToDb(db: any, state: AppState) {
 }
 
 export function getFullDatabaseState(): AppState {
-  const db = getSqliteDb();
-  if (!db) {
-    if (!memoryFallbackState) memoryFallbackState = getInitialSeed();
-    return memoryFallbackState;
+  if (!memoryFallbackState) {
+    memoryFallbackState = getInitialSeed();
   }
-
-  try {
-    // Read users
-    const usersRows = db.prepare('SELECT * FROM users').all() as DBRow[];
-    const users: Record<string, User> = {};
-    for (const r of usersRows) {
-      users[r.id as string] = {
-        id: r.id as string,
-        email: (r.email as string).toLowerCase(),
-        username: r.username as string,
-        passwordHash: r.password_hash as string,
-        createdAt: r.created_at as string,
-      };
-    }
-
-    // Read board_order
-    const orderRow = db.prepare("SELECT val FROM app_meta WHERE key = 'board_order'").get() as DBRow | undefined;
-    let boardOrder: string[] = [];
-    if (orderRow?.val) {
-      try {
-        boardOrder = JSON.parse(orderRow.val as string);
-      } catch {
-        boardOrder = [];
-      }
-    }
-
-    // Read boards
-    const boardRows = db.prepare('SELECT * FROM boards').all() as DBRow[];
-    const memberRows = db.prepare('SELECT * FROM board_members').all() as DBRow[];
-    const boards: Record<string, Board> = {};
-
-    for (const r of boardRows) {
-      const bId = r.id as string;
-      let columnIds: string[] = [];
-      try {
-        columnIds = JSON.parse((r.column_ids as string) || '[]');
-      } catch {
-        columnIds = [];
-      }
-
-      const boardMembers: Record<string, BoardMember> = {};
-      for (const m of memberRows) {
-        if (m.board_id === bId) {
-          boardMembers[m.user_id as string] = {
-            userId: m.user_id as string,
-            role: m.role as BoardMember['role'],
-            invitedAt: m.invited_at as string,
-          };
-        }
-      }
-
-      boards[bId] = {
-        id: bId,
-        title: r.title as string,
-        accent: r.accent as string,
-        columnIds,
-        createdAt: r.created_at as string,
-        ownerId: r.owner_id as string,
-        visibility: r.visibility as Board['visibility'],
-        members: boardMembers,
-      };
-    }
-
-    // Ensure all board IDs are in boardOrder
-    for (const bId of Object.keys(boards)) {
-      if (!boardOrder.includes(bId)) {
-        boardOrder.push(bId);
-      }
-    }
-
-    // Read columns
-    const colRows = db.prepare('SELECT * FROM columns').all() as DBRow[];
-    const columns: Record<string, Column> = {};
-    for (const r of colRows) {
-      let cardIds: string[] = [];
-      try {
-        cardIds = JSON.parse((r.card_ids as string) || '[]');
-      } catch {
-        cardIds = [];
-      }
-      columns[r.id as string] = {
-        id: r.id as string,
-        title: r.title as string,
-        cardIds,
-      };
-    }
-
-    // Read cards
-    const cardRows = db.prepare('SELECT * FROM cards').all() as DBRow[];
-    const cards: Record<string, Card> = {};
-    for (const r of cardRows) {
-      cards[r.id as string] = {
-        id: r.id as string,
-        title: r.title as string,
-        description: (r.description as string) || '',
-        priority: r.priority as Card['priority'],
-        dueDate: (r.due_date as string) || null,
-        completed: Boolean(r.completed),
-        createdAt: r.created_at as string,
-      };
-    }
-
-    return {
-      currentUserId: ADMIN_ID,
-      users,
-      boardOrder,
-      boards,
-      columns,
-      cards,
-    };
-  } catch (err) {
-    console.error('Error reading from SQLite database:', err);
-    if (!memoryFallbackState) memoryFallbackState = getInitialSeed();
-    return memoryFallbackState;
-  }
+  return memoryFallbackState;
 }
 
 export function saveFullDatabaseState(state: AppState): void {
-  const db = getSqliteDb();
-  if (!db) {
-    memoryFallbackState = state;
-    return;
-  }
-
-  try {
-    syncStateToDb(db, state);
-  } catch (err) {
-    console.error('Error writing to SQLite database:', err);
-  }
+  memoryFallbackState = state; // Update in-memory cache
+  return; // Skip SQLite saving for now, as getSqliteDb() returns null
 }
 
 export function findUserByEmail(email: string): User | null {
   const normalized = email.trim().toLowerCase();
-  const db = getSqliteDb();
-  if (!db) {
-    const s = getFullDatabaseState();
-    return Object.values(s.users).find((u) => u.email === normalized) ?? null;
-  }
+  const s = getFullDatabaseState();
 
-  try {
-    const row = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(normalized) as DBRow | undefined;
-    if (!row) return null;
-    return {
-      id: row.id as string,
-      email: (row.email as string).toLowerCase(),
-      username: row.username as string,
-      passwordHash: row.password_hash as string,
-      createdAt: row.created_at as string,
-    };
-  } catch {
-    return null;
-  }
+  return (
+    Object.values(s.users).find((u) => u.email.toLowerCase() === normalized) ?? null
+  )
 }
 
 export function insertUser(user: User): void {
-  const db = getSqliteDb();
-  if (!db) {
-    if (!memoryFallbackState) memoryFallbackState = getInitialSeed();
-    memoryFallbackState.users[user.id] = user;
-    return;
+  if (!memoryFallbackState) {
+    memoryFallbackState = getInitialSeed();
   }
-
-  try {
-    db.prepare(`
-      INSERT OR REPLACE INTO users (id, email, username, password_hash, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(user.id, user.email.toLowerCase(), user.username, user.passwordHash, user.createdAt);
-  } catch (err) {
-    console.error('Error inserting user to DB:', err);
-  }
+  memoryFallbackState.users[user.id] = user;
 }
