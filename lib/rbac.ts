@@ -29,24 +29,39 @@ function normalizeEmail(value: string): string {
 
 export function getEffectiveRole(
   userId: string | null,
-  members?: BoardMemberRecord | Record<string, { role: BoardAccessRole }>
+  members?: BoardMemberRecord | Record<string, { role: BoardAccessRole }>,
+  visibility: BoardVisibility = 'private',
+  ownerId?: string | null
 ): BoardAccessRole | null {
-  if (!userId || !members) return null;
-  const member = members[userId];
-  return member?.role ?? null;
+  if (!userId) {
+    return visibility === 'public' ? 'viewer' : null;
+  }
+
+  if (ownerId && userId === ownerId) {
+    return 'owner';
+  }
+
+  const member = members?.[userId];
+  if (member?.role) {
+    return member.role;
+  }
+
+  return visibility === 'public' ? 'viewer' : null;
 }
 
 export function canAccessBoard(
   userId: string | null,
   visibility: BoardVisibility,
-  members?: BoardMemberRecord | Record<string, { role: BoardAccessRole }>
+  members?: BoardMemberRecord | Record<string, { role: BoardAccessRole }>,
+  ownerId?: string | null
 ): boolean {
+  if (visibility === 'public') {
+    return true;
+  }
   if (!userId) return false;
 
-  const hasMembership = Boolean(getEffectiveRole(userId, members));
-  if (hasMembership) return true;
-
-  return false;
+  const role = getEffectiveRole(userId, members, visibility, ownerId);
+  return Boolean(role);
 }
 
 export async function hashPassword(password: string): Promise<string> {

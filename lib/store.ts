@@ -1,53 +1,48 @@
-import type { AppState, Board, BoardVisibility, User } from './types';
+import type { AppState, Board, User } from './types';
 
-const STORAGE_KEY = 'taskflow_state_v2';
-const ADMIN_PASSWORD_HASH = 'pbkdf2_sha256$220000$841155d438abacf0da2570f42fb31886$8ddc3ad164022e7f04342553e88feedd2ff2576ba80980f622184880bc093323';
-
-function getUserStorageKey(userId: string | null): string {
-  return userId ? `taskflow_state_v2_user_${userId}` : STORAGE_KEY;
-}
+export const STORAGE_KEY = 'taskflow_state_v3';
+export const ADMIN_ID = 'usr_admin';
+export const JANE_ID = 'usr_jane';
+export const ALEX_ID = 'usr_alex';
+export const ADMIN_PASSWORD_HASH =
+  'pbkdf2_sha256$220000$841155d438abacf0da2570f42fb31886$8ddc3ad164022e7f04342553e88feedd2ff2576ba80980f622184880bc093323';
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 11);
 }
 
-function createSeedData(): AppState {
-  const adminId = generateId();
-  const janeId = generateId();
-  const alexId = generateId();
-
-  const b1 = generateId();
-  const b1c1 = generateId(), b1c2 = generateId(), b1c3 = generateId();
-  const card1 = generateId(), card2 = generateId(), card3 = generateId(),
-        card4 = generateId(), card5 = generateId(), card6 = generateId();
-
-  const b2 = generateId();
-  const b2c1 = generateId(), b2c2 = generateId(), b2c3 = generateId();
-  const card7 = generateId(), card8 = generateId(), card9 = generateId();
-
-  const b3 = generateId();
-  const b3c1 = generateId(), b3c2 = generateId();
-  const card10 = generateId(), card11 = generateId();
-
+export function createSeedData(): AppState {
   const now = new Date().toISOString();
 
+  const b1 = 'board_prod_dev';
+  const b1c1 = 'col_b1_1', b1c2 = 'col_b1_2', b1c3 = 'col_b1_3';
+  const card1 = 'c1', card2 = 'c2', card3 = 'c3', card4 = 'c4', card5 = 'c5', card6 = 'c6';
+
+  const b2 = 'board_marketing';
+  const b2c1 = 'col_b2_1', b2c2 = 'col_b2_2', b2c3 = 'col_b2_3';
+  const card7 = 'c7', card8 = 'c8', card9 = 'c9';
+
+  const b3 = 'board_personal';
+  const b3c1 = 'col_b3_1', b3c2 = 'col_b3_2';
+  const card10 = 'c10', card11 = 'c11';
+
   const users: Record<string, User> = {
-    [adminId]: {
-      id: adminId,
+    [ADMIN_ID]: {
+      id: ADMIN_ID,
       email: 'admin@itask.local',
       username: 'admin',
       passwordHash: ADMIN_PASSWORD_HASH,
       createdAt: now,
     },
-    [janeId]: {
-      id: janeId,
+    [JANE_ID]: {
+      id: JANE_ID,
       email: 'jane@itask.local',
       username: 'jane',
       passwordHash: ADMIN_PASSWORD_HASH,
       createdAt: now,
     },
-    [alexId]: {
-      id: alexId,
+    [ALEX_ID]: {
+      id: ALEX_ID,
       email: 'alex@itask.local',
       username: 'alex',
       passwordHash: ADMIN_PASSWORD_HASH,
@@ -62,10 +57,10 @@ function createSeedData(): AppState {
       accent: '#7c3aed',
       columnIds: [b1c1, b1c2, b1c3],
       createdAt: now,
-      ownerId: adminId,
+      ownerId: ADMIN_ID,
       visibility: 'public',
       members: {
-        [adminId]: { userId: adminId, role: 'owner', invitedAt: now },
+        [ADMIN_ID]: { userId: ADMIN_ID, role: 'owner', invitedAt: now },
       },
     },
     [b2]: {
@@ -74,12 +69,12 @@ function createSeedData(): AppState {
       accent: '#0ea5e9',
       columnIds: [b2c1, b2c2, b2c3],
       createdAt: now,
-      ownerId: adminId,
+      ownerId: ADMIN_ID,
       visibility: 'private',
       members: {
-        [adminId]: { userId: adminId, role: 'owner', invitedAt: now },
-        [janeId]: { userId: janeId, role: 'editor', invitedAt: now },
-        [alexId]: { userId: alexId, role: 'viewer', invitedAt: now },
+        [ADMIN_ID]: { userId: ADMIN_ID, role: 'owner', invitedAt: now },
+        [JANE_ID]: { userId: JANE_ID, role: 'editor', invitedAt: now },
+        [ALEX_ID]: { userId: ALEX_ID, role: 'viewer', invitedAt: now },
       },
     },
     [b3]: {
@@ -88,17 +83,17 @@ function createSeedData(): AppState {
       accent: '#10b981',
       columnIds: [b3c1, b3c2],
       createdAt: now,
-      ownerId: janeId,
+      ownerId: JANE_ID,
       visibility: 'private',
       members: {
-        [janeId]: { userId: janeId, role: 'owner', invitedAt: now },
-        [adminId]: { userId: adminId, role: 'viewer', invitedAt: now },
+        [JANE_ID]: { userId: JANE_ID, role: 'owner', invitedAt: now },
+        [ADMIN_ID]: { userId: ADMIN_ID, role: 'viewer', invitedAt: now },
       },
     },
   };
 
   return {
-    currentUserId: adminId,
+    currentUserId: ADMIN_ID,
     users,
     boardOrder: [b1, b2, b3],
     boards,
@@ -113,15 +108,15 @@ function createSeedData(): AppState {
       [b3c2]: { id: b3c2, title: 'Done', cardIds: [] },
     },
     cards: {
-      [card1]:  { id: card1, title: 'Design new onboarding flow', description: 'Redesign the onboarding screens to improve conversion rates.', priority: 'high', dueDate: '2026-09-01', completed: false, createdAt: now },
-      [card2]:  { id: card2, title: 'Refactor authentication module', description: 'Move from JWT cookies to httpOnly tokens with refresh logic.', priority: 'medium', dueDate: '2026-08-30', completed: false, createdAt: now },
-      [card3]:  { id: card3, title: 'Implement drag-and-drop for cards', description: 'Use native HTML5 drag and drop API across all board columns.', priority: 'urgent', dueDate: '2026-08-25', completed: false, createdAt: now },
-      [card4]:  { id: card4, title: 'Add dark mode support', description: 'System-level dark mode toggle with CSS variables.', priority: 'low', dueDate: null, completed: false, createdAt: now },
-      [card5]:  { id: card5, title: 'Set up CI/CD pipeline', description: 'GitHub Actions workflow for test, lint, and deploy to Vercel.', priority: 'high', dueDate: '2026-08-20', completed: true, createdAt: now },
-      [card6]:  { id: card6, title: 'Write API documentation', description: 'Document all REST endpoints using OpenAPI 3.0 spec.', priority: 'low', dueDate: '2026-08-18', completed: true, createdAt: now },
-      [card7]:  { id: card7, title: 'Q3 newsletter concept', description: 'Draft ideas for the September newsletter campaign.', priority: 'medium', dueDate: '2026-09-05', completed: false, createdAt: now },
-      [card8]:  { id: card8, title: 'Landing page copy review', description: 'Proofread and update hero section and feature callouts.', priority: 'high', dueDate: '2026-08-28', completed: false, createdAt: now },
-      [card9]:  { id: card9, title: 'A/B test email subject lines', description: 'Run a 50/50 split test on two subject variants.', priority: 'medium', dueDate: '2026-09-10', completed: false, createdAt: now },
+      [card1]: { id: card1, title: 'Design new onboarding flow', description: 'Redesign the onboarding screens to improve conversion rates.', priority: 'high', dueDate: '2026-09-01', completed: false, createdAt: now },
+      [card2]: { id: card2, title: 'Refactor authentication module', description: 'Move from JWT cookies to httpOnly tokens with refresh logic.', priority: 'medium', dueDate: '2026-08-30', completed: false, createdAt: now },
+      [card3]: { id: card3, title: 'Implement drag-and-drop for cards', description: 'Use native HTML5 drag and drop API across all board columns.', priority: 'urgent', dueDate: '2026-08-25', completed: false, createdAt: now },
+      [card4]: { id: card4, title: 'Add dark mode support', description: 'System-level dark mode toggle with CSS variables.', priority: 'low', dueDate: null, completed: false, createdAt: now },
+      [card5]: { id: card5, title: 'Set up CI/CD pipeline', description: 'GitHub Actions workflow for test, lint, and deploy to Vercel.', priority: 'high', dueDate: '2026-08-20', completed: true, createdAt: now },
+      [card6]: { id: card6, title: 'Write API documentation', description: 'Document all REST endpoints using OpenAPI 3.0 spec.', priority: 'low', dueDate: '2026-08-18', completed: true, createdAt: now },
+      [card7]: { id: card7, title: 'Q3 newsletter concept', description: 'Draft ideas for the September newsletter campaign.', priority: 'medium', dueDate: '2026-09-05', completed: false, createdAt: now },
+      [card8]: { id: card8, title: 'Landing page copy review', description: 'Proofread and update hero section and feature callouts.', priority: 'high', dueDate: '2026-08-28', completed: false, createdAt: now },
+      [card9]: { id: card9, title: 'A/B test email subject lines', description: 'Run a 50/50 split test on two subject variants.', priority: 'medium', dueDate: '2026-09-10', completed: false, createdAt: now },
       [card10]: { id: card10, title: 'Read "Atomic Habits"', description: 'Finish the last 4 chapters and take notes.', priority: 'low', dueDate: '2026-09-15', completed: false, createdAt: now },
       [card11]: { id: card11, title: 'Plan weekend hiking trip', description: 'Choose a trail, pack gear, and check the weather forecast.', priority: 'medium', dueDate: '2026-08-30', completed: false, createdAt: now },
     },
@@ -131,20 +126,16 @@ function createSeedData(): AppState {
 export function loadState(): AppState {
   if (typeof window === 'undefined') return createSeedData();
   try {
-    const sessionState = localStorage.getItem(STORAGE_KEY);
-    const currentUserId = sessionState ? JSON.parse(sessionState)?.currentUserId ?? null : null;
-    const storageKey = getUserStorageKey(currentUserId);
-    const raw = localStorage.getItem(storageKey) ?? sessionState;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const seed = createSeedData();
 
     if (!raw) {
-      const seed = createSeedData();
       saveState(seed);
       return seed;
     }
 
     const parsed = JSON.parse(raw) as Partial<AppState>;
-    const seed = createSeedData();
-    const nextState = {
+    const nextState: AppState = {
       ...seed,
       ...parsed,
       users: { ...seed.users, ...(parsed.users ?? {}) },
@@ -152,12 +143,8 @@ export function loadState(): AppState {
       columns: { ...seed.columns, ...(parsed.columns ?? {}) },
       cards: { ...seed.cards, ...(parsed.cards ?? {}) },
       boardOrder: parsed.boardOrder ?? seed.boardOrder,
-      currentUserId: parsed.currentUserId ?? seed.currentUserId,
+      currentUserId: parsed.currentUserId !== undefined ? parsed.currentUserId : seed.currentUserId,
     };
-
-    if (nextState.currentUserId) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentUserId: nextState.currentUserId }));
-    }
 
     return nextState;
   } catch {
@@ -169,9 +156,11 @@ export function loadState(): AppState {
 
 export function saveState(state: AppState): void {
   if (typeof window === 'undefined') return;
-  const currentUserKey = getUserStorageKey(state.currentUserId);
-  localStorage.setItem(currentUserKey, JSON.stringify(state));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentUserId: state.currentUserId }));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (err) {
+    console.error('Failed to save state to localStorage:', err);
+  }
 }
 
 export { generateId };

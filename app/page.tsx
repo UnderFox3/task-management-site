@@ -7,7 +7,7 @@ import { useBoardContext } from './providers/BoardProvider';
 export default function Home() {
   const { state, isBoardAccessible, currentUser } = useBoardContext();
   const router = useRouter();
-  const visibleBoards = state.boardOrder.filter((boardId) => {
+  const myBoards = state.boardOrder.filter((boardId) => {
     const board = state.boards[boardId];
     if (!board) return false;
     if (board.ownerId === currentUser?.id) return true;
@@ -15,11 +15,19 @@ export default function Home() {
     return false;
   });
 
+  const accessibleBoards = state.boardOrder.filter((boardId) => {
+    const board = state.boards[boardId];
+    if (!board) return false;
+    return isBoardAccessible(boardId);
+  });
+
   useEffect(() => {
-    if (visibleBoards.length > 0) {
-      router.replace(`/board/${visibleBoards[0]}`);
+    if (myBoards.length > 0) {
+      router.replace(`/board/${myBoards[0]}`);
+    } else if (accessibleBoards.length > 0) {
+      router.replace(`/board/${accessibleBoards[0]}`);
     }
-  }, [visibleBoards, router]);
+  }, [myBoards, accessibleBoards, router]);
 
   return (
     <div

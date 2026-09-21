@@ -336,8 +336,12 @@ interface Props {
 }
 
 export default function BoardView({ boardId }: Props) {
-  const { state, addColumn, updateBoard, moveColumn, inviteUserToBoard, currentUser, canManageBoard } = useBoardContext();
+  const { state, addColumn, updateBoard, moveColumn, inviteUserToBoard, currentUser, canManageBoard, getBoardRole } = useBoardContext();
   const board = state.boards[boardId];
+
+  const canAdmin = canManageBoard(boardId, 'owner');
+  const canEdit = canManageBoard(boardId, 'editor');
+  const userRole = getBoardRole(boardId);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft]         = useState(board?.title ?? '');
@@ -358,6 +362,7 @@ export default function BoardView({ boardId }: Props) {
   }
 
   function saveTitle() {
+    if (!canAdmin) return;
     const trimmed = titleDraft.trim();
     if (trimmed) updateBoard(boardId, { title: trimmed });
     else setTitleDraft(board.title);
@@ -365,6 +370,7 @@ export default function BoardView({ boardId }: Props) {
   }
 
   function submitColumn() {
+    if (!canEdit) return;
     if (newColTitle.trim()) {
       addColumn(boardId, newColTitle.trim());
       setNewColTitle('');
@@ -373,11 +379,13 @@ export default function BoardView({ boardId }: Props) {
   }
 
   function handleColumnDragStart(e: React.DragEvent, columnId: string) {
+    if (!canEdit) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-task-column', JSON.stringify({ type: 'column', columnId }));
   }
 
   function handleColumnDrop(e: React.DragEvent, targetIndex: number) {
+    if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
     try {
@@ -401,6 +409,7 @@ export default function BoardView({ boardId }: Props) {
   }
 
   function openCreateCard(columnId: string) {
+    if (!canEdit) return;
     setSelectedCard(null);
     setCreateCardState({ columnId });
   }
@@ -468,9 +477,10 @@ export default function BoardView({ boardId }: Props) {
               minWidth: '200px',
             }}
           />
-        ) : (
+        ) : canAdmin ? (
           <button
             onClick={() => { setTitleDraft(board.title); setIsEditingTitle(true); }}
+            title="Click to edit board title"
             style={{
               background: 'none',
               border: 'none',
@@ -494,10 +504,14 @@ export default function BoardView({ boardId }: Props) {
               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           </button>
+        ) : (
+          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 700, letterSpacing: '-0.3px', padding: '6px 8px', color: 'var(--text-primary)' }}>
+            {board.title}
+          </h1>
         )}
 
-        {/* Card count summary */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {/* Card count summary, Role badge & Visibility */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {board.columnIds.map((colId) => {
             const col = state.columns[colId];
             if (!col) return null;
@@ -508,21 +522,65 @@ export default function BoardView({ boardId }: Props) {
               </span>
             );
           })}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border-medium)', borderRadius: '999px', padding: '6px 10px', color: 'var(--text-secondary)', fontSize: '12px' }}>
-            <span style={{ width: '8px', height: '8px', background: board.visibility === 'public' ? '#22c55e' : '#f59e0b', borderRadius: '50%' }} />
-            {board.visibility === 'public' ? 'Public' : 'Private'}
+
+          {/* User Role Badge */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: '1px solid var(--border-medium)',
+              borderRadius: '999px',
+              padding: '5px 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              background: userRole === 'owner' ? 'rgba(124, 58, 237, 0.15)' : userRole === 'editor' ? 'rgba(14, 165, 233, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              color: userRole === 'owner' ? 'var(--accent-300)' : userRole === 'editor' ? '#38bdf8' : '#fbbf24',
+            }}
+          >
+            <span>{userRole === 'owner' ? '👑 Owner' : userRole === 'editor' ? '✏️ Editor' : '👁️ Viewer (Read-only)'}</span>
           </div>
+
+          {/* Visibility toggle / badge */}
+          <button
+            type="button"
+            disabled={!canAdmin}
+            onClick={() => {
+              if (canAdmin) {
+                updateBoard(boardId, { visibility: board.visibility === 'public' ? 'private' : 'public' });
+              }
+            }}
+            title={canAdmin ? 'Click to toggle Public / Private' : `This board is ${board.visibility}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              border: '1px solid var(--border-medium)',
+              borderRadius: '999px',
+              padding: '5px 12px',
+              color: 'var(--text-secondary)',
+              fontSize: '12px',
+              fontWeight: 500,
+              background: 'var(--bg-subtle)',
+              cursor: canAdmin ? 'pointer' : 'default',
+            }}
+          >
+            <span style={{ width: '8px', height: '8px', background: board.visibility === 'public' ? '#22c55e' : '#f59e0b', borderRadius: '50%' }} />
+            <span>{board.visibility === 'public' ? 'Public' : 'Private'}</span>
+            {canAdmin && <span style={{ fontSize: '11px', opacity: 0.7 }}>⇄</span>}
+          </button>
         </div>
       </header>
 
-      {canManageBoard(boardId, 'owner') && board.visibility === 'private' && (
+      {/* Invite Collaborator (for board owner) */}
+      {canAdmin && (
         <div style={{ borderBottom: '1px solid var(--border-subtle)', padding: '14px 28px 18px', background: 'var(--bg-base)' }}>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <input
               type="email"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="Invite by email"
+              placeholder="Invite collaborator by email"
               style={{ flex: '1 1 220px', minWidth: 180, padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-medium)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
             />
             <select
@@ -571,99 +629,102 @@ export default function BoardView({ boardId }: Props) {
               onOpenCreate={openCreateCard}
               onDragStartColumn={handleColumnDragStart}
               onDropColumn={handleColumnDrop}
+              canEdit={canEdit}
             />
           </div>
         ))}
 
         {/* Add column */}
-        {isAddingColumn ? (
-          <div
-            style={{
-              width: '288px',
-              minWidth: '288px',
-              background: 'var(--bg-column)',
-              border: '1px solid var(--border-medium)',
-              borderRadius: '16px',
-              padding: '14px',
-              flexShrink: 0,
-            }}
-            className="animate-fade-in"
-          >
-            <input
-              autoFocus
-              placeholder="Column title…"
-              value={newColTitle}
-              onChange={(e) => setNewColTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submitColumn();
-                if (e.key === 'Escape') { setIsAddingColumn(false); setNewColTitle(''); }
-              }}
+        {canEdit && (
+          isAddingColumn ? (
+            <div
               style={{
-                width: '100%',
-                padding: '9px 12px',
-                borderRadius: '10px',
-                border: '1px solid var(--accent-500)',
-                background: 'var(--bg-input)',
-                color: 'var(--text-primary)',
-                fontSize: '14px',
-                fontWeight: 600,
-                outline: 'none',
-                fontFamily: 'inherit',
-                marginBottom: '8px',
+                width: '288px',
+                minWidth: '288px',
+                background: 'var(--bg-column)',
+                border: '1px solid var(--border-medium)',
+                borderRadius: '16px',
+                padding: '14px',
+                flexShrink: 0,
               }}
-            />
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                onClick={submitColumn}
-                style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: 'var(--accent-500)', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-              >
-                Add Column
-              </button>
-              <button
-                onClick={() => { setIsAddingColumn(false); setNewColTitle(''); }}
-                style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid var(--border-medium)', background: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}
-              >
-                Cancel
-              </button>
+              className="animate-fade-in"
+            >
+              <input
+                autoFocus
+                placeholder="Column title…"
+                value={newColTitle}
+                onChange={(e) => setNewColTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitColumn();
+                  if (e.key === 'Escape') { setIsAddingColumn(false); setNewColTitle(''); }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--accent-500)',
+                  background: 'var(--bg-input)',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  marginBottom: '8px',
+                }}
+              />
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={submitColumn}
+                  style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: 'var(--accent-500)', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+                >
+                  Add Column
+                </button>
+                <button
+                  onClick={() => { setIsAddingColumn(false); setNewColTitle(''); }}
+                  style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid var(--border-medium)', background: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button
-            id="add-column-btn"
-            onClick={() => setIsAddingColumn(true)}
-            style={{
-              width: '288px',
-              minWidth: '288px',
-              height: '56px',
-              borderRadius: '16px',
-              border: '1px dashed var(--border-medium)',
-              background: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              flexShrink: 0,
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-500)';
-              (e.currentTarget as HTMLElement).style.color = 'var(--accent-300)';
-              (e.currentTarget as HTMLElement).style.background = 'rgba(124,58,237,0.06)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-medium)';
-              (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
-              (e.currentTarget as HTMLElement).style.background = 'none';
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add Column
-          </button>
+          ) : (
+            <button
+              id="add-column-btn"
+              onClick={() => setIsAddingColumn(true)}
+              style={{
+                width: '288px',
+                minWidth: '288px',
+                height: '56px',
+                borderRadius: '16px',
+                border: '1px dashed var(--border-medium)',
+                background: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                flexShrink: 0,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-500)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--accent-300)';
+                (e.currentTarget as HTMLElement).style.background = 'rgba(124,58,237,0.06)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-medium)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                (e.currentTarget as HTMLElement).style.background = 'none';
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Column
+            </button>
+          )
         )}
       </div>
 
@@ -679,6 +740,7 @@ export default function BoardView({ boardId }: Props) {
           card={selectedCard.card}
           columnId={selectedCard.columnId}
           onClose={() => setSelectedCard(null)}
+          readOnly={!canEdit}
         />
       )}
     </div>

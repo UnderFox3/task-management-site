@@ -13,9 +13,19 @@ interface Props {
   onOpenCreate: (columnId: string) => void;
   onDragStartColumn: (e: React.DragEvent, columnId: string) => void;
   onDropColumn: (e: React.DragEvent, targetIndex: number) => void;
+  canEdit?: boolean;
 }
 
-export default function Column({ boardId, columnId, index, onOpenCard, onOpenCreate, onDragStartColumn, onDropColumn }: Props) {
+export default function Column({
+  boardId,
+  columnId,
+  index,
+  onOpenCard,
+  onOpenCreate,
+  onDragStartColumn,
+  onDropColumn,
+  canEdit = true,
+}: Props) {
   const { state, updateColumn, deleteColumn, moveCard, updateCard } = useBoardContext();
   const column = state.columns[columnId];
 
@@ -41,11 +51,11 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
   // ── Drag & Drop ────────────────────────────────────────────────────────────
 
   function handleCardDragStart(e: React.DragEvent, cardId: string) {
+    if (!canEdit) return;
     dragCardRef.current = { cardId, fromColumnId: columnId };
     e.stopPropagation();
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/x-task-card', JSON.stringify({ cardId, fromColumnId: columnId }));
-    // slight visual delay so the ghost shows the card first
     setTimeout(() => {
       (e.target as HTMLElement).style.opacity = '0.4';
     }, 0);
@@ -57,6 +67,7 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
   }
 
   function handleDragOver(e: React.DragEvent) {
+    if (!canEdit) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setIsDragOver(true);
@@ -67,6 +78,7 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
   }
 
   function handleDrop(e: React.DragEvent) {
+    if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
@@ -74,7 +86,6 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
       const payload = e.dataTransfer.getData('application/x-task-card');
       if (!payload) return;
       const { cardId, fromColumnId } = JSON.parse(payload);
-      // Drop at end of column
       moveCard(cardId, fromColumnId, columnId, cards.length);
     } catch {
       // ignore
@@ -82,6 +93,7 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
   }
 
   function handleCardDrop(e: React.DragEvent, targetIndex: number) {
+    if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
@@ -98,12 +110,14 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
   return (
     <>
       <div
-        draggable
+        draggable={canEdit}
         onDragStart={(e) => {
+          if (!canEdit) return;
           e.stopPropagation();
           onDragStartColumn(e, columnId);
         }}
         onDragOver={(e) => {
+          if (!canEdit) return;
           e.preventDefault();
           e.stopPropagation();
           e.dataTransfer.dropEffect = 'move';
@@ -111,6 +125,7 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
         }}
         onDragLeave={handleDragLeave}
         onDrop={(e) => {
+          if (!canEdit) return;
           e.preventDefault();
           e.stopPropagation();
           onDropColumn(e, index);
@@ -127,7 +142,7 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
           maxHeight: 'calc(100dvh - 96px)',
           transition: 'background 0.15s ease, border-color 0.15s ease',
           flexShrink: 0,
-          cursor: 'grab',
+          cursor: canEdit ? 'grab' : 'default',
         }}
       >
         {/* ── Column Header ── */}
@@ -162,11 +177,16 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
             />
           ) : (
             <button
-              onClick={() => { setTitleDraft(column.title); setIsEditingTitle(true); }}
+              onClick={() => {
+                if (canEdit) {
+                  setTitleDraft(column.title);
+                  setIsEditingTitle(true);
+                }
+              }}
               style={{
                 background: 'none',
                 border: 'none',
-                cursor: 'text',
+                cursor: canEdit ? 'text' : 'default',
                 color: 'var(--text-primary)',
                 fontSize: '14px',
                 fontWeight: 600,
@@ -179,7 +199,9 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
                 gap: '8px',
                 transition: 'background 0.15s ease',
               }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'var(--border-subtle)')}
+              onMouseEnter={(e) => {
+                if (canEdit) (e.currentTarget as HTMLElement).style.background = 'var(--border-subtle)';
+              }}
               onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'none')}
             >
               {column.title}
@@ -199,33 +221,35 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
           )}
 
           {/* Delete column */}
-          <button
-            onClick={() => deleteColumn(boardId, columnId)}
-            title="Delete column"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-              padding: '6px',
-              borderRadius: '6px',
-              display: 'flex',
-              transition: 'color 0.15s, background 0.15s',
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#ef4444';
-              (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
-              (e.currentTarget as HTMLElement).style.background = 'none';
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => deleteColumn(boardId, columnId)}
+              title="Delete column"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                padding: '6px',
+                borderRadius: '6px',
+                display: 'flex',
+                transition: 'color 0.15s, background 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = '#ef4444';
+                (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                (e.currentTarget as HTMLElement).style.background = 'none';
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* ── Cards List ── */}
@@ -279,42 +303,44 @@ export default function Column({ boardId, columnId, index, onOpenCard, onOpenCre
         </div>
 
         {/* ── Add Card ── */}
-        <div style={{ padding: '6px 10px 10px', flexShrink: 0 }}>
-          <button
-            type="button"
-            onClick={() => onOpenCreate(columnId)}
-            style={{
-              width: '100%',
-              padding: '8px',
-              borderRadius: '10px',
-              border: '1px dashed var(--border-medium)',
-              background: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: '13px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-500)';
-              (e.currentTarget as HTMLElement).style.color = 'var(--accent-300)';
-              (e.currentTarget as HTMLElement).style.background = 'rgba(124,58,237,0.06)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-medium)';
-              (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
-              (e.currentTarget as HTMLElement).style.background = 'none';
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Add a card
-          </button>
-        </div>
+        {canEdit && (
+          <div style={{ padding: '6px 10px 10px', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => onOpenCreate(columnId)}
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '10px',
+                border: '1px dashed var(--border-medium)',
+                background: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-500)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--accent-300)';
+                (e.currentTarget as HTMLElement).style.background = 'rgba(124,58,237,0.06)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-medium)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                (e.currentTarget as HTMLElement).style.background = 'none';
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add a card
+            </button>
+          </div>
+        )}
       </div>
 
     </>

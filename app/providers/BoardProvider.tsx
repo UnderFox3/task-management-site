@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import type { AppState, Board, BoardAccessRole, Card, Column, Priority, User } from '@/lib/types';
 import { generateId, loadState, saveState } from '@/lib/store';
-import { canAccessBoard, normalizeEmail, verifyPassword, hashPassword } from '@/lib/rbac';
+import { canAccessBoard, normalizeEmail, verifyPassword, hashPassword, getEffectiveRole } from '@/lib/rbac';
 
 interface LoginResult {
   success: boolean;
@@ -22,9 +22,11 @@ interface BoardContextValue {
   currentUser: User | null;
   isBoardAccessible: (boardId: string) => boolean;
   canManageBoard: (boardId: string, minimumRole?: BoardAccessRole) => boolean;
+  getBoardRole: (boardId: string) => BoardAccessRole | null;
   login: (email: string, password: string) => Promise<LoginResult>;
   register: (email: string, username: string, password: string) => Promise<LoginResult>;
   logout: () => void;
+  switchUser: (userId: string) => void;
   inviteUserToBoard: (boardId: string, email: string, role?: BoardAccessRole) => { success: boolean; message: string };
   addBoard: (title: string, accent: string, visibility?: 'public' | 'private') => string;
   updateBoard: (boardId: string, changes: Partial<Pick<Board, 'title' | 'accent' | 'visibility'>>) => void;
@@ -68,7 +70,7 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         boards: { ...state.boards, [action.board.id]: action.board },
-        boardOrder: [...state.boardOrder, action.board.id],
+        boardOrder: state.boardOrder.includes(action.board.id) ? state.boardOrder : [...state.boardOrder, action.board.id],
       };
     }
     case 'UPDATE_BOARD': {
@@ -257,12 +259,47 @@ const BoardContext = createContext<BoardContextValue | null>(null);
 export function BoardProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, null as unknown as AppState);
 
+  // Initialize from localStorage immediately, then fetch fresh SQLite state from /api/state
   useEffect(() => {
-    dispatch({ type: 'LOAD', payload: loadState() });
+    const local = loadState();
+    dispatch({ type: 'LOAD', payload: local });
+
+    fetch('/api/state')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((serverState: AppState | null) => {
+        if (serverState && serverState.boards) {
+          const currentId = local.currentUserId;
+          const merged: AppState = {
+            ...local,
+            ...serverState,
+            users: { ...local.users, ...serverState.users },
+            boards: { ...local.boards, ...serverState.boards },
+            columns: { ...local.columns, ...serverState.columns },
+            cards: { ...local.cards, ...serverState.cards },
+            boardOrder: serverState.boardOrder && serverState.boardOrder.length > 0 ? serverState.boardOrder : local.boardOrder,
+            currentUserId: currentId ?? serverState.currentUserId,
+          };
+          dispatch({ type: 'LOAD', payload: merged });
+          saveState(merged);
+        }
+      })
+      .catch((err) => console.warn('Could not sync with server state, using local:', err));
   }, []);
 
+  // Save changes to localStorage and push to backend SQLite
   useEffect(() => {
-    if (state) saveState(state);
+    if (!state) return;
+    saveState(state);
+
+    const timer = setTimeout(() => {
+      fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state),
+      }).catch(() => {});
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [state]);
 
   const currentUser = useMemo(() => {
@@ -270,20 +307,26 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     return state.users[state.currentUserId] ?? null;
   }, [state]);
 
+  const getBoardRole = useCallback((boardId: string): BoardAccessRole | null => {
+    const board = state?.boards[boardId];
+    if (!board) return null;
+    return getEffectiveRole(state.currentUserId, board.members, board.visibility, board.ownerId);
+  }, [state]);
+
   const isBoardAccessible = useCallback((boardId: string) => {
     const board = state?.boards[boardId];
     if (!board) return false;
-    return canAccessBoard(state.currentUserId, board.visibility, board.members);
+    return canAccessBoard(state.currentUserId, board.visibility, board.members, board.ownerId);
   }, [state]);
 
   const canManageBoard = useCallback((boardId: string, minimumRole: BoardAccessRole = 'owner') => {
     const board = state?.boards[boardId];
-    if (!board || !state.currentUserId) return false;
-    const membership = board.members[state.currentUserId];
-    if (!membership) return false;
+    if (!board) return false;
+    const role = getBoardRole(boardId);
+    if (!role) return false;
     const roleOrder: Record<BoardAccessRole, number> = { owner: 3, editor: 2, viewer: 1 };
-    return roleOrder[membership.role] >= roleOrder[minimumRole];
-  }, [state]);
+    return roleOrder[role] >= roleOrder[minimumRole];
+  }, [state, getBoardRole]);
 
   const deleteBoard = useCallback((boardId: string) => {
     dispatch({ type: 'DELETE_BOARD', boardId });
@@ -291,8 +334,9 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
 
   const addBoard = useCallback((title: string, accent: string, visibility: 'public' | 'private' = 'private'): string => {
     if (!state?.currentUserId) return '';
+    const boardId = generateId();
     const board: Board = {
-      id: generateId(),
+      id: boardId,
       title,
       accent,
       columnIds: [],
@@ -324,8 +368,8 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       return { success: false, message: 'You are not signed in.' };
     }
 
-    const currentRole = board.members[state.currentUserId]?.role;
-    if (currentRole !== 'owner') {
+    const isOwner = board.ownerId === state.currentUserId || board.members[state.currentUserId]?.role === 'owner';
+    if (!isOwner) {
       return { success: false, message: 'Only the board owner can invite collaborators.' };
     }
 
@@ -341,7 +385,23 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
     const normalizedEmail = normalizeEmail(email);
-    const user = Object.values(state.users).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, password }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        dispatch({ type: 'SET_CURRENT_USER', currentUserId: data.user.id });
+        return { success: true, message: data.message };
+      }
+    } catch {
+      // offline fallback
+    }
+
+    const user = Object.values(state?.users ?? {}).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
     if (!user) return { success: false, message: 'No account was found for that email.' };
 
     const valid = await verifyPassword(password, user.passwordHash);
@@ -357,7 +417,31 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       return { success: false, message: 'Please provide a valid email and a password with at least 8 characters.' };
     }
 
-    const existingUser = Object.values(state.users).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, username, password }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        const nextUser: User = {
+          id: data.user.id,
+          email: data.user.email,
+          username: data.user.username,
+          passwordHash: '',
+          createdAt: data.user.createdAt,
+        };
+        dispatch({ type: 'ADD_USER', user: nextUser });
+        return { success: true, message: data.message };
+      } else if (data.message) {
+        return { success: false, message: data.message };
+      }
+    } catch {
+      // offline fallback
+    }
+
+    const existingUser = Object.values(state?.users ?? {}).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
     if (existingUser) return { success: false, message: 'An account with that email already exists.' };
 
     const userId = generateId();
@@ -372,6 +456,10 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'ADD_USER', user: nextUser });
     return { success: true, message: 'Account created successfully. You are now signed in.' };
   }, [state]);
+
+  const switchUser = useCallback((userId: string) => {
+    dispatch({ type: 'SET_CURRENT_USER', currentUserId: userId });
+  }, []);
 
   const logout = useCallback(() => {
     dispatch({ type: 'SET_CURRENT_USER', currentUserId: null });
@@ -435,9 +523,11 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         currentUser,
         isBoardAccessible,
         canManageBoard,
+        getBoardRole,
         login,
         register,
         logout,
+        switchUser,
         inviteUserToBoard,
         addBoard,
         updateBoard,
