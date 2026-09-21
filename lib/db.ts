@@ -1,19 +1,10 @@
-import type { AppState, Board, Column, Card, User, BoardMember } from './types';
-import fs from 'node:fs';
-import path from 'node:path';
+import type { AppState, User } from './types';
 
 export const ADMIN_ID = 'usr_admin';
 export const JANE_ID = 'usr_jane';
 export const ALEX_ID = 'usr_alex';
 export const ADMIN_PASSWORD_HASH =
   'pbkdf2_sha256$220000$841155d438abacf0da2570f42fb31886$8ddc3ad164022e7f04342553e88feedd2ff2576ba80980f622184880bc093323';
-
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DATA_DIR, 'itask.db');
-
-interface DBRow {
-  [key: string]: unknown;
-}
 
 // Global in-memory cache / fallback if SQLite cannot be loaded
 let memoryFallbackState: AppState | null = null;
