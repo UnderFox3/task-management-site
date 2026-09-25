@@ -1,14 +1,23 @@
 import { NextResponse } from 'next/server';
-import { findUserByEmail, insertUser } from '@/lib/db';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { findUserByEmailInD1, insertUserInD1 } from '@/lib/db';
 import { hashPassword, normalizeEmail } from '@/lib/rbac';
 import { generateId } from '@/lib/store';
 import type { User } from '@/lib/types';
 
-export const runtime = 'nodejs';
+export const runtime = 'edge';
+
+type registerRequest = {
+  email: string;
+  username: string;
+  password: string;
+}
 
 export async function POST(request: Request) {
   try {
-    const { email, username, password } = await request.json();
+    const body = (await request.json()) as registerRequest;
+    const { env } = await getCloudflareContext({ async: true });
+    const { email, username, password } = body;
     const normalized = normalizeEmail(email || '');
 
     if (!normalized || !password || password.length < 8) {
@@ -18,11 +27,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const existing = findUserByEmail(normalized);
+    const existing = await findUserByEmailInD1(env.DB, normalized);
     if (existing) {
-      return NextResponse.json({ success: false, message: 'An account with that email already exists.' }, { status: 409 });
+      return NextResponse.json(
+        { success: false, message: 'An account with that email already exists.' },
+        { status: 409 }
+      );
     }
-
     const userId = generateId();
     const newUser: User = {
       id: userId,
@@ -32,19 +43,24 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     };
 
-    insertUser(newUser);
+    await insertUserInD1(env.DB, newUser);
+
+    const verifyRow = await env.DB
+      .prepare("SELECT email, password_hash FROM users WHERE email = ?")
+      .bind(newUser.email)
+      .first()
+
+    const verify = await findUserByEmailInD1(env.DB, newUser.email);
 
     return NextResponse.json({
       success: true,
       message: 'Account created successfully.',
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        username: newUser.username,
-        createdAt: newUser.createdAt,
-      },
+      user: { id: newUser.id, email: newUser.email, username: newUser.username, createdAt: newUser.createdAt },
     });
   } catch (err) {
-    return NextResponse.json({ success: false, message: 'Internal server error', details: String(err) }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: 'Internal server error', details: String(err) },
+      { status: 500 }
+    );
   }
 }

@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import Sidebar from './Sidebar';
 import { useBoardContext } from '@/app/providers/BoardProvider';
+import { Route } from 'next';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { currentUser, isBoardAccessible, state, switchUser, logout } = useBoardContext();
@@ -16,7 +17,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!currentUser && !isAuthRoute) {
       const redirectUrl = pathname && pathname !== '/' ? `/login?redirect=${encodeURIComponent(pathname)}` : '/login';
-      router.replace(redirectUrl as any);
+      router.replace(redirectUrl as Route);
     }
   }, [currentUser, isAuthRoute, pathname, router]);
 
@@ -72,7 +73,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               type="button"
               onClick={() => {
                 logout();
-                router.push(`/login?redirect=${encodeURIComponent(pathname)}` as any);
+                router.push(`/login?redirect=${encodeURIComponent(pathname)}` as Route);
               }}
               style={{
                 padding: '10px 18px',

@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useBoardContext } from '@/app/providers/BoardProvider';
+import { Route } from 'next';
 
 function LoginForm() {
   const router = useRouter();
@@ -20,7 +21,7 @@ function LoginForm() {
   // If already logged in, redirect to intended target
   useEffect(() => {
     if (currentUser) {
-      router.replace(redirectTarget as any);
+      router.replace(redirectTarget as Route);
     }
   }, [currentUser, router, redirectTarget]);
 
@@ -33,7 +34,7 @@ function LoginForm() {
       setIsSuccess(result.success);
       if (result.success) {
         setTimeout(() => {
-          router.replace(redirectTarget as any);
+          router.replace(redirectTarget as Route);
         }, 400);
       }
     } finally {
@@ -229,7 +230,7 @@ function LoginForm() {
         <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '14px', color: 'var(--text-secondary)' }}>
           Don&apos;t have an account?{' '}
           <Link
-            href={(`/signup${redirectTarget !== '/' ? `?redirect=${encodeURIComponent(redirectTarget)}` : ''}`) as any}
+            href={(`/signup${redirectTarget !== '/' ? `?redirect=${encodeURIComponent(redirectTarget)}` : ''}`) as Route}
             style={{ color: 'var(--accent-400)', fontWeight: 600, textDecoration: 'none' }}
           >
             Create an account

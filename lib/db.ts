@@ -1,15 +1,15 @@
-import type { AppState, User } from './types';
+﻿import type { AppState, Board, BoardMember, Card, Column, User } from './types';
 
+// ---------------------------------------------------------------------------
+// Seed constants — kept identical to the original dummy data
+// ---------------------------------------------------------------------------
 export const ADMIN_ID = 'usr_admin';
 export const JANE_ID = 'usr_jane';
 export const ALEX_ID = 'usr_alex';
 export const ADMIN_PASSWORD_HASH =
   'pbkdf2_sha256$220000$841155d438abacf0da2570f42fb31886$8ddc3ad164022e7f04342553e88feedd2ff2576ba80980f622184880bc093323';
 
-// Global in-memory cache / fallback if SQLite cannot be loaded
-let memoryFallbackState: AppState | null = null;
-
-function getInitialSeed(): AppState {
+export function getInitialSeed(): AppState {
   const now = new Date().toISOString();
 
   const b1 = 'board_prod_dev';
@@ -27,68 +27,23 @@ function getInitialSeed(): AppState {
   return {
     currentUserId: ADMIN_ID,
     users: {
-      [ADMIN_ID]: {
-        id: ADMIN_ID,
-        email: 'admin@itask.local',
-        username: 'admin',
-        passwordHash: ADMIN_PASSWORD_HASH,
-        createdAt: now,
-      },
-      [JANE_ID]: {
-        id: JANE_ID,
-        email: 'jane@itask.local',
-        username: 'jane',
-        passwordHash: ADMIN_PASSWORD_HASH,
-        createdAt: now,
-      },
-      [ALEX_ID]: {
-        id: ALEX_ID,
-        email: 'alex@itask.local',
-        username: 'alex',
-        passwordHash: ADMIN_PASSWORD_HASH,
-        createdAt: now,
-      },
+      [ADMIN_ID]: { id: ADMIN_ID, email: 'admin@itask.local', username: 'admin', passwordHash: ADMIN_PASSWORD_HASH, createdAt: now },
+      [JANE_ID]: { id: JANE_ID, email: 'jane@itask.local', username: 'jane', passwordHash: ADMIN_PASSWORD_HASH, createdAt: now },
+      [ALEX_ID]: { id: ALEX_ID, email: 'alex@itask.local', username: 'alex', passwordHash: ADMIN_PASSWORD_HASH, createdAt: now },
     },
     boardOrder: [b1, b2, b3],
     boards: {
       [b1]: {
-        id: b1,
-        title: 'Product Development',
-        accent: '#7c3aed',
-        columnIds: [b1c1, b1c2, b1c3],
-        createdAt: now,
-        ownerId: ADMIN_ID,
-        visibility: 'public',
-        members: {
-          [ADMIN_ID]: { userId: ADMIN_ID, role: 'owner', invitedAt: now },
-        },
+        id: b1, title: 'Product Development', accent: '#7c3aed', columnIds: [b1c1, b1c2, b1c3], createdAt: now, ownerId: ADMIN_ID, visibility: 'public',
+        members: { [ADMIN_ID]: { userId: ADMIN_ID, role: 'owner', invitedAt: now } }
       },
       [b2]: {
-        id: b2,
-        title: 'Marketing Campaign',
-        accent: '#0ea5e9',
-        columnIds: [b2c1, b2c2, b2c3],
-        createdAt: now,
-        ownerId: ADMIN_ID,
-        visibility: 'private',
-        members: {
-          [ADMIN_ID]: { userId: ADMIN_ID, role: 'owner', invitedAt: now },
-          [JANE_ID]: { userId: JANE_ID, role: 'editor', invitedAt: now },
-          [ALEX_ID]: { userId: ALEX_ID, role: 'viewer', invitedAt: now },
-        },
+        id: b2, title: 'Marketing Campaign', accent: '#0ea5e9', columnIds: [b2c1, b2c2, b2c3], createdAt: now, ownerId: ADMIN_ID, visibility: 'private',
+        members: { [ADMIN_ID]: { userId: ADMIN_ID, role: 'owner', invitedAt: now }, [JANE_ID]: { userId: JANE_ID, role: 'editor', invitedAt: now }, [ALEX_ID]: { userId: ALEX_ID, role: 'viewer', invitedAt: now } }
       },
       [b3]: {
-        id: b3,
-        title: 'Personal Tasks',
-        accent: '#10b981',
-        columnIds: [b3c1, b3c2],
-        createdAt: now,
-        ownerId: JANE_ID,
-        visibility: 'private',
-        members: {
-          [JANE_ID]: { userId: JANE_ID, role: 'owner', invitedAt: now },
-          [ADMIN_ID]: { userId: ADMIN_ID, role: 'viewer', invitedAt: now },
-        },
+        id: b3, title: 'Personal Tasks', accent: '#10b981', columnIds: [b3c1, b3c2], createdAt: now, ownerId: JANE_ID, visibility: 'private',
+        members: { [JANE_ID]: { userId: JANE_ID, role: 'owner', invitedAt: now }, [ADMIN_ID]: { userId: ADMIN_ID, role: 'viewer', invitedAt: now } }
       },
     },
     columns: {
@@ -117,101 +72,167 @@ function getInitialSeed(): AppState {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let dbInstance: any = null;
+// ---------------------------------------------------------------------------
+// Row types returned by D1 queries
+// ---------------------------------------------------------------------------
+interface UserRow { id: string; email: string; username: string; password_hash: string; created_at: string }
+interface BoardRow { id: string; title: string; accent: string; owner_id: string; visibility: string; column_ids: string; created_at: string }
+interface MemberRow { board_id: string; user_id: string; role: string; invited_at: string }
+interface ColumnRow { id: string; board_id: string; title: string; card_ids: string }
+interface CardRow { id: string; column_id: string; title: string; description: string; priority: string; due_date: string | null; completed: number; created_at: string }
 
-function getSqliteDb() {
- return null; // Placeholder for SQLite database connection logic
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function syncStateToDb(db: any, state: AppState) {
-  // Sync users
-  const insertUser = db.prepare(`
-    INSERT OR REPLACE INTO users (id, email, username, password_hash, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  for (const u of Object.values(state.users)) {
-    insertUser.run(u.id, u.email.toLowerCase(), u.username, u.passwordHash, u.createdAt);
+// ---------------------------------------------------------------------------
+// Seed database with dummy data (idempotent — skips if users already exist)
+// ---------------------------------------------------------------------------
+export async function seedDatabaseIfEmpty(db: D1Database): Promise<{ seeded: boolean }> {
+  const result = await db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
+  if ((result?.count ?? 0) > 0) {
+    return { seeded: false };
   }
 
-  // Sync boardOrder
-  db.prepare('INSERT OR REPLACE INTO app_meta (key, val) VALUES (?, ?)').run('board_order', JSON.stringify(state.boardOrder));
+  const seed = getInitialSeed();
+  const stmts: D1PreparedStatement[] = [];
 
-  // Sync boards & members
-  const insertBoard = db.prepare(`
-    INSERT OR REPLACE INTO boards (id, title, accent, owner_id, visibility, column_ids, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertMember = db.prepare(`
-    INSERT OR REPLACE INTO board_members (board_id, user_id, role, invited_at)
-    VALUES (?, ?, ?, ?)
-  `);
+  // Board order
+  stmts.push(db.prepare('INSERT OR REPLACE INTO app_meta (key, val) VALUES (?, ?)')
+    .bind('board_order', JSON.stringify(seed.boardOrder)));
+
+  // Users
+  for (const u of Object.values(seed.users)) {
+    stmts.push(db.prepare('INSERT OR REPLACE INTO users (id, email, username, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(u.id, u.email.toLowerCase(), u.username, u.passwordHash, u.createdAt));
+  }
+
+  // Boards & members
+  for (const b of Object.values(seed.boards)) {
+    stmts.push(db.prepare('INSERT OR REPLACE INTO boards (id, title, accent, owner_id, visibility, column_ids, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(b.id, b.title, b.accent, b.ownerId, b.visibility, JSON.stringify(b.columnIds), b.createdAt));
+
+    for (const m of Object.values(b.members)) {
+      stmts.push(db.prepare('INSERT OR REPLACE INTO board_members (board_id, user_id, role, invited_at) VALUES (?, ?, ?, ?)')
+        .bind(b.id, m.userId, m.role, m.invitedAt));
+    }
+  }
+
+  // Columns
+  for (const [colId, col] of Object.entries(seed.columns)) {
+    const board = Object.values(seed.boards).find((b) => b.columnIds.includes(colId));
+    stmts.push(db.prepare('INSERT OR REPLACE INTO columns (id, board_id, title, card_ids) VALUES (?, ?, ?, ?)')
+      .bind(col.id, board?.id ?? '', col.title, JSON.stringify(col.cardIds)));
+  }
+
+  // Cards
+  for (const [cardId, card] of Object.entries(seed.cards)) {
+    const col = Object.values(seed.columns).find((c) => c.cardIds.includes(cardId));
+    stmts.push(db.prepare('INSERT OR REPLACE INTO cards (id, column_id, title, description, priority, due_date, completed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(card.id, col?.id ?? '', card.title, card.description, card.priority, card.dueDate, card.completed ? 1 : 0, card.createdAt));
+  }
+
+  await db.batch(stmts);
+  return { seeded: true };
+}
+
+// ---------------------------------------------------------------------------
+// Read the full app state from D1
+// ---------------------------------------------------------------------------
+export async function getFullStateFromD1(db: D1Database): Promise<AppState> {
+  const [usersResult, boardsResult, membersResult, columnsResult, cardsResult, metaResult] = await Promise.all([
+    db.prepare('SELECT * FROM users').all<UserRow>(),
+    db.prepare('SELECT * FROM boards').all<BoardRow>(),
+    db.prepare('SELECT * FROM board_members').all<MemberRow>(),
+    db.prepare('SELECT * FROM columns').all<ColumnRow>(),
+    db.prepare('SELECT * FROM cards').all<CardRow>(),
+    db.prepare("SELECT val FROM app_meta WHERE key = 'board_order'").first<{ val: string }>(),
+  ]);
+
+  const users: Record<string, User> = {};
+  for (const row of (usersResult.results ?? [])) {
+    users[row.id] = { id: row.id, email: row.email, username: row.username, passwordHash: row.password_hash, createdAt: row.created_at };
+  }
+
+  const membersByBoard: Record<string, Record<string, BoardMember>> = {};
+  for (const row of (membersResult.results ?? [])) {
+    if (!membersByBoard[row.board_id]) membersByBoard[row.board_id] = {};
+    membersByBoard[row.board_id][row.user_id] = { userId: row.user_id, role: row.role as BoardMember['role'], invitedAt: row.invited_at ?? '' };
+  }
+
+  const boards: Record<string, Board> = {};
+  for (const row of (boardsResult.results ?? [])) {
+    boards[row.id] = {
+      id: row.id, title: row.title, accent: row.accent,
+      ownerId: row.owner_id, visibility: row.visibility as Board['visibility'],
+      columnIds: JSON.parse(row.column_ids ?? '[]') as string[],
+      createdAt: row.created_at, members: membersByBoard[row.id] ?? {},
+    };
+  }
+
+  const columns: Record<string, Column> = {};
+  for (const row of (columnsResult.results ?? [])) {
+    columns[row.id] = { id: row.id, title: row.title, cardIds: JSON.parse(row.card_ids ?? '[]') as string[] };
+  }
+
+  const cards: Record<string, Card> = {};
+  for (const row of (cardsResult.results ?? [])) {
+    cards[row.id] = {
+      id: row.id, title: row.title, description: row.description,
+      priority: row.priority as Card['priority'], dueDate: row.due_date,
+      completed: row.completed === 1, createdAt: row.created_at,
+    };
+  }
+
+  const boardOrder: string[] = metaResult?.val ? (JSON.parse(metaResult.val) as string[]) : Object.keys(boards);
+  return { users, boards, columns, cards, boardOrder, currentUserId: null };
+}
+
+// ---------------------------------------------------------------------------
+// Persist the full app state back to D1 (upsert everything)
+// ---------------------------------------------------------------------------
+export async function saveFullStateToD1(db: D1Database, state: AppState): Promise<void> {
+  const stmts: D1PreparedStatement[] = [];
+
+  stmts.push(db.prepare('INSERT OR REPLACE INTO app_meta (key, val) VALUES (?, ?)')
+    .bind('board_order', JSON.stringify(state.boardOrder)));
 
   for (const b of Object.values(state.boards)) {
-    insertBoard.run(b.id, b.title, b.accent, b.ownerId, b.visibility, JSON.stringify(b.columnIds), b.createdAt);
+    stmts.push(db.prepare('INSERT OR REPLACE INTO boards (id, title, accent, owner_id, visibility, column_ids, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(b.id, b.title, b.accent, b.ownerId, b.visibility, JSON.stringify(b.columnIds), b.createdAt));
+
     if (b.members) {
       for (const m of Object.values(b.members)) {
-        insertMember.run(b.id, m.userId, m.role, m.invitedAt);
+        stmts.push(db.prepare('INSERT OR REPLACE INTO board_members (board_id, user_id, role, invited_at) VALUES (?, ?, ?, ?)')
+          .bind(b.id, m.userId, m.role, m.invitedAt ?? ''));
       }
     }
   }
 
-  // Sync columns
-  const insertColumn = db.prepare(`
-    INSERT OR REPLACE INTO columns (id, board_id, title, card_ids)
-    VALUES (?, ?, ?, ?)
-  `);
-  for (const [colId, col] of Object.entries(state.columns)) {
-    // find boardId for col
-    const board = Object.values(state.boards).find((b) => b.columnIds.includes(colId));
-    insertColumn.run(col.id, board?.id ?? '', col.title, JSON.stringify(col.cardIds));
+  for (const col of Object.values(state.columns)) {
+    const board = Object.values(state.boards).find((b) => b.columnIds.includes(col.id));
+    stmts.push(db.prepare('INSERT OR REPLACE INTO columns (id, board_id, title, card_ids) VALUES (?, ?, ?, ?)')
+      .bind(col.id, board?.id ?? '', col.title, JSON.stringify(col.cardIds)));
   }
 
-  // Sync cards
-  const insertCard = db.prepare(`
-    INSERT OR REPLACE INTO cards (id, column_id, title, description, priority, due_date, completed, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const [cardId, card] of Object.entries(state.cards)) {
-    const col = Object.values(state.columns).find((c) => c.cardIds.includes(cardId));
-    insertCard.run(
-      card.id,
-      col?.id ?? '',
-      card.title,
-      card.description,
-      card.priority,
-      card.dueDate,
-      card.completed ? 1 : 0,
-      card.createdAt
-    );
+  for (const card of Object.values(state.cards)) {
+    const col = Object.values(state.columns).find((c) => c.cardIds.includes(card.id));
+    stmts.push(db.prepare('INSERT OR REPLACE INTO cards (id, column_id, title, description, priority, due_date, completed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(card.id, col?.id ?? '', card.title, card.description, card.priority, card.dueDate, card.completed ? 1 : 0, card.createdAt));
   }
+
+  await db.batch(stmts);
 }
 
-export function getFullDatabaseState(): AppState {
-  if (!memoryFallbackState) {
-    memoryFallbackState = getInitialSeed();
-  }
-  return memoryFallbackState;
-}
-
-export function saveFullDatabaseState(state: AppState): void {
-  memoryFallbackState = state; // Update in-memory cache
-  return; // Skip SQLite saving for now, as getSqliteDb() returns null
-}
-
-export function findUserByEmail(email: string): User | null {
+// ---------------------------------------------------------------------------
+// User helpers
+// ---------------------------------------------------------------------------
+export async function findUserByEmailInD1(db: D1Database, email: string): Promise<User | null> {
   const normalized = email.trim().toLowerCase();
-  const s = getFullDatabaseState();
+  const row = await db.prepare('SELECT * FROM users WHERE email = ?').bind(normalized).first<UserRow>();
 
-  return (
-    Object.values(s.users).find((u) => u.email.toLowerCase() === normalized) ?? null
-  )
+  if (!row) return null;
+  return { id: row.id, email: row.email, username: row.username, passwordHash: row.password_hash, createdAt: row.created_at };
 }
 
-export function insertUser(user: User): void {
-  if (!memoryFallbackState) {
-    memoryFallbackState = getInitialSeed();
-  }
-  memoryFallbackState.users[user.id] = user;
+export async function insertUserInD1(db: D1Database, user: User): Promise<void> {
+  await db.prepare('INSERT INTO users (id, email, username, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(user.id, user.email.toLowerCase(), user.username, user.passwordHash, user.createdAt)
+    .run();
 }

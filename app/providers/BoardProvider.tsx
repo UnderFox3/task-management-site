@@ -265,8 +265,8 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'LOAD', payload: local });
 
     fetch('/api/state')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((serverState: AppState | null) => {
+      .then((res) => res.ok ? (res.json() as Promise<AppState>) : null)
+      .then((serverState) => {
         if (serverState && serverState.boards) {
           const currentId = local.currentUserId;
           const merged: AppState = {
@@ -296,7 +296,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(state),
-      }).catch(() => {});
+      }).catch(() => { });
     }, 300);
 
     return () => clearTimeout(timer);
@@ -383,6 +383,17 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     return { success: true, message: `${user.username} has been invited as a ${role}.` };
   }, [state]);
 
+  type loginApiResponse = {
+    success: boolean;
+    message: string;
+    user?: {
+      id: string;
+      email: string;
+      username: string;
+      createdAt: string;
+    };
+  };
+
   const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
     const normalizedEmail = normalizeEmail(email);
 
@@ -392,7 +403,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: normalizedEmail, password }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as loginApiResponse;
       if (res.ok && data.success && data.user) {
         dispatch({ type: 'SET_CURRENT_USER', currentUserId: data.user.id });
         return { success: true, message: data.message };
@@ -411,6 +422,17 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     return { success: true, message: `Welcome back, ${user.username}!` };
   }, [state]);
 
+  type registerApiResponse = {
+    success: boolean;
+    message: string;
+    user?: {
+      id: string;
+      email: string;
+      username: string;
+      createdAt: string;
+    };
+  };
+
   const register = useCallback(async (email: string, username: string, password: string): Promise<LoginResult> => {
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail || password.length < 8) {
@@ -423,7 +445,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: normalizedEmail, username, password }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as registerApiResponse;
       if (res.ok && data.success && data.user) {
         const nextUser: User = {
           id: data.user.id,
