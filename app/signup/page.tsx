@@ -50,63 +50,118 @@ function SignupForm() {
       if (result.success) {
         setTimeout(() => {
           router.replace(redirectTarget as Route);
-        }, 500);
+        }, 1200);
       }
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  const loginLink = (`/login${redirectTarget !== '/' ? `?redirect=${encodeURIComponent(redirectTarget)}` : ''}`) as Route;
+
   return (
     <div
       style={{
-        minHeight: '100dvh',
+        flex: 1,
+        width: '100%',
+        minHeight: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'radial-gradient(ellipse at 50% 10%, rgba(124, 58, 237, 0.22), transparent 45%), var(--bg-base)',
-        padding: '24px',
+        background: 'radial-gradient(ellipse at 50% 15%, rgba(124, 58, 237, 0.22), transparent 50%), var(--bg-base)',
+        padding: '16px',
+        boxSizing: 'border-box',
       }}
     >
       <div
         style={{
           width: '100%',
-          maxWidth: '460px',
+          maxWidth: '430px',
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
           background: 'var(--bg-modal)',
           border: '1px solid var(--border-medium)',
           borderRadius: '24px',
           boxShadow: 'var(--shadow-modal)',
-          padding: '36px 32px',
+          padding: '24px 28px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <div style={{ marginBottom: '26px', textAlign: 'center' }}>
+        {/* Navigation Tabs between Sign In & Create Account */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            background: 'var(--bg-subtle)',
+            padding: '4px',
+            borderRadius: '12px',
+            marginBottom: '18px',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
+          <Link
+            href={loginLink}
+            id="tab-sign-in"
+            style={{
+              padding: '7px 0',
+              textAlign: 'center',
+              borderRadius: '9px',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--text-muted)',
+              textDecoration: 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Sign in
+          </Link>
           <div
             style={{
-              width: '52px',
-              height: '52px',
-              borderRadius: '16px',
+              padding: '7px 0',
+              textAlign: 'center',
+              borderRadius: '9px',
+              fontSize: '13px',
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, var(--accent-600), var(--accent-500))',
+              color: '#fff',
+              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
+            }}
+          >
+            Create account
+          </div>
+        </div>
+
+        {/* Logo & Header */}
+        <div style={{ marginBottom: '16px', textAlign: 'center' }}>
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '14px',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
               background: 'linear-gradient(135deg, var(--accent-600), var(--accent-400))',
               color: '#fff',
-              fontSize: '26px',
+              fontSize: '22px',
               fontWeight: 800,
-              boxShadow: '0 0 24px var(--accent-glow)',
-              marginBottom: '16px',
+              boxShadow: '0 0 20px var(--accent-glow)',
+              marginBottom: '10px',
             }}
           >
             T
           </div>
-          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800, letterSpacing: '-0.04em' }}>Create account</h1>
-          <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5 }}>
+          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 800, letterSpacing: '-0.03em' }}>Create account</h1>
+          <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.4 }}>
             Join iTask to create boards and organize your work.
           </p>
         </div>
 
-        <form onSubmit={handleSignup} style={{ display: 'grid', gap: '16px' }}>
-          <label style={{ display: 'grid', gap: '6px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>Username</span>
+        <form onSubmit={handleSignup} style={{ display: 'grid', gap: '11px' }}>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Username</span>
             <input
               type="text"
               id="signup-username"
@@ -118,8 +173,8 @@ function SignupForm() {
             />
           </label>
 
-          <label style={{ display: 'grid', gap: '6px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>Email address</span>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Email address</span>
             <input
               type="email"
               id="signup-email"
@@ -131,8 +186,8 @@ function SignupForm() {
             />
           </label>
 
-          <label style={{ display: 'grid', gap: '6px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>Password</span>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Password</span>
             <input
               type="password"
               id="signup-password"
@@ -145,8 +200,8 @@ function SignupForm() {
             />
           </label>
 
-          <label style={{ display: 'grid', gap: '6px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>Confirm password</span>
+          <label style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>Confirm password</span>
             <input
               type="password"
               id="signup-confirm-password"
@@ -162,13 +217,13 @@ function SignupForm() {
           {message && (
             <div
               style={{
-                borderRadius: '12px',
-                padding: '11px 14px',
+                borderRadius: '10px',
+                padding: '9px 12px',
                 background: isSuccess ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
                 border: `1px solid ${isSuccess ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
                 color: isSuccess ? '#4ade80' : '#f87171',
-                fontSize: '13px',
-                lineHeight: 1.5,
+                fontSize: '12px',
+                lineHeight: 1.4,
               }}
             >
               {message}
@@ -182,10 +237,10 @@ function SignupForm() {
             style={{
               border: 'none',
               borderRadius: '12px',
-              padding: '13px 18px',
+              padding: '11px 16px',
               background: 'linear-gradient(135deg, var(--accent-600), var(--accent-400))',
               color: '#fff',
-              fontSize: '15px',
+              fontSize: '14px',
               fontWeight: 700,
               cursor: isSubmitting ? 'wait' : 'pointer',
               boxShadow: '0 4px 14px rgba(124, 58, 237, 0.35)',
@@ -196,10 +251,11 @@ function SignupForm() {
           </button>
         </form>
 
-        <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '14px', color: 'var(--text-secondary)' }}>
+        <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
           Already have an account?{' '}
           <Link
-            href={(`/login${redirectTarget !== '/' ? `?redirect=${encodeURIComponent(redirectTarget)}` : ''}`) as Route}
+            href={loginLink}
+            id="link-sign-in"
             style={{ color: 'var(--accent-400)', fontWeight: 600, textDecoration: 'none' }}
           >
             Sign in
@@ -220,12 +276,13 @@ export default function SignupPage() {
 
 const inputStyles: React.CSSProperties = {
   width: '100%',
-  padding: '11px 14px',
+  padding: '10px 12px',
   borderRadius: '10px',
   border: '1px solid var(--border-medium)',
   background: 'var(--bg-input)',
   color: 'var(--text-primary)',
-  fontSize: '14px',
+  fontSize: '13px',
   outline: 'none',
   fontFamily: 'inherit',
+  boxSizing: 'border-box',
 };

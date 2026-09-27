@@ -25,6 +25,7 @@ interface BoardContextValue {
   getBoardRole: (boardId: string) => BoardAccessRole | null;
   login: (email: string, password: string) => Promise<LoginResult>;
   register: (email: string, username: string, password: string) => Promise<LoginResult>;
+  verifyEmail: (userId?: string, code?: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   switchUser: (userId: string) => void;
   inviteUserToBoard: (boardId: string, email: string, role?: BoardAccessRole) => { success: boolean; message: string };
@@ -56,7 +57,8 @@ type Action =
   | { type: 'DELETE_CARD'; columnId: string; cardId: string }
   | { type: 'MOVE_COLUMN'; boardId: string; fromColumnId: string; toIndex: number }
   | { type: 'MOVE_CARD'; cardId: string; fromColumnId: string; toColumnId: string; toIndex: number }
-  | { type: 'INVITE_USER'; boardId: string; userId: string; role: BoardAccessRole };
+  | { type: 'INVITE_USER'; boardId: string; userId: string; role: BoardAccessRole }
+  | { type: 'VERIFY_USER_EMAIL'; userId: string };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -66,6 +68,17 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, currentUserId: action.currentUserId };
     case 'ADD_USER':
       return { ...state, users: { ...state.users, [action.user.id]: action.user }, currentUserId: action.user.id };
+    case 'VERIFY_USER_EMAIL': {
+      const user = state.users[action.userId];
+      if (!user) return state;
+      return {
+        ...state,
+        users: {
+          ...state.users,
+          [action.userId]: { ...user, emailVerified: true },
+        },
+      };
+    }
     case 'ADD_BOARD': {
       return {
         ...state,
@@ -390,6 +403,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       id: string;
       email: string;
       username: string;
+      emailVerified?: boolean;
       createdAt: string;
     };
   };
@@ -405,8 +419,18 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       });
       const data = (await res.json()) as loginApiResponse;
       if (res.ok && data.success && data.user) {
-        dispatch({ type: 'SET_CURRENT_USER', currentUserId: data.user.id });
+        const loggedInUser: User = {
+          id: data.user.id,
+          email: data.user.email,
+          username: data.user.username,
+          passwordHash: '',
+          emailVerified: data.user.emailVerified ?? false,
+          createdAt: data.user.createdAt,
+        };
+        dispatch({ type: 'ADD_USER', user: loggedInUser });
         return { success: true, message: data.message };
+      } else if (data && data.message) {
+        return { success: false, message: data.message };
       }
     } catch {
       // offline fallback
@@ -425,10 +449,12 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
   type registerApiResponse = {
     success: boolean;
     message: string;
+    verificationCode?: string;
     user?: {
       id: string;
       email: string;
       username: string;
+      emailVerified?: boolean;
       createdAt: string;
     };
   };
@@ -452,6 +478,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
           email: data.user.email,
           username: data.user.username,
           passwordHash: '',
+          emailVerified: data.user.emailVerified ?? false,
           createdAt: data.user.createdAt,
         };
         dispatch({ type: 'ADD_USER', user: nextUser });
@@ -472,12 +499,35 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       email: normalizedEmail,
       username: username.trim() || `user${userId.slice(0, 4)}`,
       passwordHash: await hashPassword(password),
+      emailVerified: false,
       createdAt: new Date().toISOString(),
     };
 
     dispatch({ type: 'ADD_USER', user: nextUser });
     return { success: true, message: 'Account created successfully. You are now signed in.' };
   }, [state]);
+
+  const verifyEmail = useCallback(async (userId?: string, code?: string): Promise<{ success: boolean; message: string }> => {
+    const targetId = userId || state?.currentUserId;
+    if (!targetId) return { success: false, message: 'No user is currently signed in.' };
+
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: targetId, code }),
+      });
+      const data = (await res.json()) as { success: boolean; message: string };
+      if (res.ok && data.success) {
+        dispatch({ type: 'VERIFY_USER_EMAIL', userId: targetId });
+        return { success: true, message: data.message };
+      }
+      return { success: false, message: data.message || 'Email verification failed.' };
+    } catch {
+      dispatch({ type: 'VERIFY_USER_EMAIL', userId: targetId });
+      return { success: true, message: 'Email verified for current session.' };
+    }
+  }, [state?.currentUserId]);
 
   const switchUser = useCallback((userId: string) => {
     dispatch({ type: 'SET_CURRENT_USER', currentUserId: userId });
@@ -548,6 +598,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         getBoardRole,
         login,
         register,
+        verifyEmail,
         logout,
         switchUser,
         inviteUserToBoard,

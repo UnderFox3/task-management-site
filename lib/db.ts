@@ -1,4 +1,4 @@
-﻿import type { AppState, Board, BoardMember, Card, Column, User } from './types';
+import type { AppState, Board, BoardMember, Card, Column, User } from './types';
 
 // ---------------------------------------------------------------------------
 // Seed constants — kept identical to the original dummy data
@@ -27,9 +27,9 @@ export function getInitialSeed(): AppState {
   return {
     currentUserId: ADMIN_ID,
     users: {
-      [ADMIN_ID]: { id: ADMIN_ID, email: 'admin@itask.local', username: 'admin', passwordHash: ADMIN_PASSWORD_HASH, createdAt: now },
-      [JANE_ID]: { id: JANE_ID, email: 'jane@itask.local', username: 'jane', passwordHash: ADMIN_PASSWORD_HASH, createdAt: now },
-      [ALEX_ID]: { id: ALEX_ID, email: 'alex@itask.local', username: 'alex', passwordHash: ADMIN_PASSWORD_HASH, createdAt: now },
+      [ADMIN_ID]: { id: ADMIN_ID, email: 'admin@itask.local', username: 'admin', passwordHash: ADMIN_PASSWORD_HASH, emailVerified: true, createdAt: now },
+      [JANE_ID]: { id: JANE_ID, email: 'jane@itask.local', username: 'jane', passwordHash: ADMIN_PASSWORD_HASH, emailVerified: true, createdAt: now },
+      [ALEX_ID]: { id: ALEX_ID, email: 'alex@itask.local', username: 'alex', passwordHash: ADMIN_PASSWORD_HASH, emailVerified: true, createdAt: now },
     },
     boardOrder: [b1, b2, b3],
     boards: {
@@ -75,11 +75,50 @@ export function getInitialSeed(): AppState {
 // ---------------------------------------------------------------------------
 // Row types returned by D1 queries
 // ---------------------------------------------------------------------------
-interface UserRow { id: string; email: string; username: string; password_hash: string; created_at: string }
-interface BoardRow { id: string; title: string; accent: string; owner_id: string; visibility: string; column_ids: string; created_at: string }
-interface MemberRow { board_id: string; user_id: string; role: string; invited_at: string }
-interface ColumnRow { id: string; board_id: string; title: string; card_ids: string }
-interface CardRow { id: string; column_id: string; title: string; description: string; priority: string; due_date: string | null; completed: number; created_at: string }
+interface UserRow {
+  id: string;
+  email: string;
+  username: string;
+  password_hash: string;
+  role?: string;
+  email_verified?: number;
+  created_at: string;
+}
+
+interface BoardRow {
+  id: string;
+  title: string;
+  accent: string;
+  owner_id: string;
+  visibility: string;
+  column_ids: string;
+  created_at: string;
+}
+
+interface MemberRow {
+  board_id: string;
+  user_id: string;
+  role: string;
+  invited_at: string;
+}
+
+interface ColumnRow {
+  id: string;
+  board_id: string;
+  title: string;
+  card_ids: string;
+}
+
+interface CardRow {
+  id: string;
+  column_id: string;
+  title: string;
+  description: string;
+  priority: string;
+  due_date: string | null;
+  completed: number;
+  created_at: string;
+}
 
 // ---------------------------------------------------------------------------
 // Seed database with dummy data (idempotent — skips if users already exist)
@@ -99,7 +138,7 @@ export async function seedDatabaseIfEmpty(db: D1Database): Promise<{ seeded: boo
 
   // Users
   for (const u of Object.values(seed.users)) {
-    stmts.push(db.prepare('INSERT OR REPLACE INTO users (id, email, username, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+    stmts.push(db.prepare('INSERT OR REPLACE INTO users (id, email, username, password_hash, email_verified, created_at) VALUES (?, ?, ?, ?, 1, ?)')
       .bind(u.id, u.email.toLowerCase(), u.username, u.passwordHash, u.createdAt));
   }
 
@@ -136,6 +175,12 @@ export async function seedDatabaseIfEmpty(db: D1Database): Promise<{ seeded: boo
 // Read the full app state from D1
 // ---------------------------------------------------------------------------
 export async function getFullStateFromD1(db: D1Database): Promise<AppState> {
+  // Ensure default seed exists if the database is fresh
+  const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
+  if ((userCount?.count ?? 0) === 0) {
+    await seedDatabaseIfEmpty(db);
+  }
+
   const [usersResult, boardsResult, membersResult, columnsResult, cardsResult, metaResult] = await Promise.all([
     db.prepare('SELECT * FROM users').all<UserRow>(),
     db.prepare('SELECT * FROM boards').all<BoardRow>(),
@@ -147,7 +192,14 @@ export async function getFullStateFromD1(db: D1Database): Promise<AppState> {
 
   const users: Record<string, User> = {};
   for (const row of (usersResult.results ?? [])) {
-    users[row.id] = { id: row.id, email: row.email, username: row.username, passwordHash: row.password_hash, createdAt: row.created_at };
+    users[row.id] = {
+      id: row.id,
+      email: row.email,
+      username: row.username,
+      passwordHash: row.password_hash,
+      emailVerified: row.email_verified === 1,
+      createdAt: row.created_at,
+    };
   }
 
   const membersByBoard: Record<string, Record<string, BoardMember>> = {};
@@ -158,29 +210,61 @@ export async function getFullStateFromD1(db: D1Database): Promise<AppState> {
 
   const boards: Record<string, Board> = {};
   for (const row of (boardsResult.results ?? [])) {
+    let parsedColumnIds: string[] = [];
+    try {
+      parsedColumnIds = Array.isArray(row.column_ids) ? row.column_ids : JSON.parse(row.column_ids ?? '[]');
+    } catch {
+      parsedColumnIds = [];
+    }
     boards[row.id] = {
-      id: row.id, title: row.title, accent: row.accent,
-      ownerId: row.owner_id, visibility: row.visibility as Board['visibility'],
-      columnIds: JSON.parse(row.column_ids ?? '[]') as string[],
-      createdAt: row.created_at, members: membersByBoard[row.id] ?? {},
+      id: row.id,
+      title: row.title,
+      accent: row.accent,
+      ownerId: row.owner_id,
+      visibility: row.visibility as Board['visibility'],
+      columnIds: parsedColumnIds,
+      createdAt: row.created_at,
+      members: membersByBoard[row.id] ?? {},
     };
   }
 
   const columns: Record<string, Column> = {};
   for (const row of (columnsResult.results ?? [])) {
-    columns[row.id] = { id: row.id, title: row.title, cardIds: JSON.parse(row.card_ids ?? '[]') as string[] };
+    let parsedCardIds: string[] = [];
+    try {
+      parsedCardIds = Array.isArray(row.card_ids) ? row.card_ids : JSON.parse(row.card_ids ?? '[]');
+    } catch {
+      parsedCardIds = [];
+    }
+    columns[row.id] = {
+      id: row.id,
+      title: row.title,
+      cardIds: parsedCardIds,
+    };
   }
 
   const cards: Record<string, Card> = {};
   for (const row of (cardsResult.results ?? [])) {
     cards[row.id] = {
-      id: row.id, title: row.title, description: row.description,
-      priority: row.priority as Card['priority'], dueDate: row.due_date,
-      completed: row.completed === 1, createdAt: row.created_at,
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      priority: row.priority as Card['priority'],
+      dueDate: row.due_date,
+      completed: row.completed === 1,
+      createdAt: row.created_at,
     };
   }
 
-  const boardOrder: string[] = metaResult?.val ? (JSON.parse(metaResult.val) as string[]) : Object.keys(boards);
+  let boardOrder: string[] = Object.keys(boards);
+  if (metaResult?.val) {
+    try {
+      boardOrder = JSON.parse(metaResult.val) as string[];
+    } catch {
+      boardOrder = Object.keys(boards);
+    }
+  }
+
   return { users, boards, columns, cards, boardOrder, currentUserId: null };
 }
 
@@ -190,34 +274,100 @@ export async function getFullStateFromD1(db: D1Database): Promise<AppState> {
 export async function saveFullStateToD1(db: D1Database, state: AppState): Promise<void> {
   const stmts: D1PreparedStatement[] = [];
 
-  stmts.push(db.prepare('INSERT OR REPLACE INTO app_meta (key, val) VALUES (?, ?)')
-    .bind('board_order', JSON.stringify(state.boardOrder)));
+  // 1. Upsert users first so boards foreign key constraint (owner_id -> users.id) succeeds
+  for (const u of Object.values(state.users ?? {})) {
+    stmts.push(
+      db.prepare(`
+        INSERT INTO users (id, email, username, password_hash, email_verified, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          email = excluded.email,
+          username = excluded.username,
+          password_hash = CASE WHEN excluded.password_hash != '' THEN excluded.password_hash ELSE users.password_hash END,
+          email_verified = CASE WHEN excluded.email_verified = 1 THEN 1 ELSE users.email_verified END
+      `).bind(
+        u.id,
+        u.email.toLowerCase(),
+        u.username,
+        u.passwordHash ?? '',
+        u.emailVerified ? 1 : 0,
+        u.createdAt || new Date().toISOString()
+      )
+    );
+  }
 
-  for (const b of Object.values(state.boards)) {
-    stmts.push(db.prepare('INSERT OR REPLACE INTO boards (id, title, accent, owner_id, visibility, column_ids, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(b.id, b.title, b.accent, b.ownerId, b.visibility, JSON.stringify(b.columnIds), b.createdAt));
+  // 2. Persist board order
+  stmts.push(
+    db.prepare('INSERT OR REPLACE INTO app_meta (key, val) VALUES (?, ?)')
+      .bind('board_order', JSON.stringify(state.boardOrder ?? []))
+  );
+
+  // 3. Persist boards and their members
+  for (const b of Object.values(state.boards ?? {})) {
+    const columnIds = Array.isArray(b.columnIds)
+      ? b.columnIds
+      : (typeof b.columnIds === 'string' ? JSON.parse(b.columnIds || '[]') : []);
+
+    stmts.push(
+      db.prepare('INSERT OR REPLACE INTO boards (id, title, accent, owner_id, visibility, column_ids, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(b.id, b.title, b.accent, b.ownerId, b.visibility, JSON.stringify(columnIds), b.createdAt)
+    );
 
     if (b.members) {
       for (const m of Object.values(b.members)) {
-        stmts.push(db.prepare('INSERT OR REPLACE INTO board_members (board_id, user_id, role, invited_at) VALUES (?, ?, ?, ?)')
-          .bind(b.id, m.userId, m.role, m.invitedAt ?? ''));
+        stmts.push(
+          db.prepare('INSERT OR REPLACE INTO board_members (board_id, user_id, role, invited_at) VALUES (?, ?, ?, ?)')
+            .bind(b.id, m.userId, m.role, m.invitedAt ?? '')
+        );
       }
     }
   }
 
-  for (const col of Object.values(state.columns)) {
-    const board = Object.values(state.boards).find((b) => b.columnIds.includes(col.id));
-    stmts.push(db.prepare('INSERT OR REPLACE INTO columns (id, board_id, title, card_ids) VALUES (?, ?, ?, ?)')
-      .bind(col.id, board?.id ?? '', col.title, JSON.stringify(col.cardIds)));
+  // 4. Persist columns, matching them to their boards
+  for (const col of Object.values(state.columns ?? {})) {
+    const cardIds = Array.isArray(col.cardIds)
+      ? col.cardIds
+      : (typeof col.cardIds === 'string' ? JSON.parse(col.cardIds || '[]') : []);
+
+    const board = Object.values(state.boards ?? {}).find((b) => {
+      const list = Array.isArray(b.columnIds) ? b.columnIds : [];
+      return list.includes(col.id);
+    });
+
+    if (board) {
+      stmts.push(
+        db.prepare('INSERT OR REPLACE INTO columns (id, board_id, title, card_ids) VALUES (?, ?, ?, ?)')
+          .bind(col.id, board.id, col.title, JSON.stringify(cardIds))
+      );
+    }
   }
 
-  for (const card of Object.values(state.cards)) {
-    const col = Object.values(state.columns).find((c) => c.cardIds.includes(card.id));
-    stmts.push(db.prepare('INSERT OR REPLACE INTO cards (id, column_id, title, description, priority, due_date, completed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(card.id, col?.id ?? '', card.title, card.description, card.priority, card.dueDate, card.completed ? 1 : 0, card.createdAt));
+  // 5. Persist cards, matching them to their columns
+  for (const card of Object.values(state.cards ?? {})) {
+    const col = Object.values(state.columns ?? {}).find((c) => {
+      const list = Array.isArray(c.cardIds) ? c.cardIds : [];
+      return list.includes(card.id);
+    });
+
+    if (col) {
+      stmts.push(
+        db.prepare('INSERT OR REPLACE INTO cards (id, column_id, title, description, priority, due_date, completed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(card.id, col.id, card.title, card.description, card.priority, card.dueDate, card.completed ? 1 : 0, card.createdAt)
+      );
+    }
   }
 
-  await db.batch(stmts);
+  // Execute in statement chunks to respect Cloudflare D1 batch limits
+  const BATCH_SIZE = 40;
+  try {
+    for (let i = 0; i < stmts.length; i += BATCH_SIZE) {
+      const chunk = stmts.slice(i, i + BATCH_SIZE);
+      await db.batch(chunk);
+    }
+  } catch (err) {
+    console.error('Failed to save state to D1:', err);
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -225,14 +375,28 @@ export async function saveFullStateToD1(db: D1Database, state: AppState): Promis
 // ---------------------------------------------------------------------------
 export async function findUserByEmailInD1(db: D1Database, email: string): Promise<User | null> {
   const normalized = email.trim().toLowerCase();
-  const row = await db.prepare('SELECT * FROM users WHERE email = ?').bind(normalized).first<UserRow>();
+  const row = await db.prepare('SELECT * FROM users WHERE LOWER(email) = ?').bind(normalized).first<UserRow>();
 
   if (!row) return null;
-  return { id: row.id, email: row.email, username: row.username, passwordHash: row.password_hash, createdAt: row.created_at };
+  return {
+    id: row.id,
+    email: row.email,
+    username: row.username,
+    passwordHash: row.password_hash,
+    emailVerified: row.email_verified === 1,
+    createdAt: row.created_at,
+  };
 }
 
 export async function insertUserInD1(db: D1Database, user: User): Promise<void> {
-  await db.prepare('INSERT INTO users (id, email, username, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(user.id, user.email.toLowerCase(), user.username, user.passwordHash, user.createdAt)
+  const verified = user.emailVerified ? 1 : 0;
+  await db.prepare('INSERT INTO users (id, email, username, password_hash, email_verified, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(user.id, user.email.toLowerCase(), user.username, user.passwordHash, verified, user.createdAt)
+    .run();
+}
+
+export async function verifyUserEmailInD1(db: D1Database, userId: string): Promise<void> {
+  await db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?')
+    .bind(userId)
     .run();
 }

@@ -23,7 +23,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // If on login or signup, render the page without the dashboard sidebar
   if (isAuthRoute) {
-    return <main style={{ minHeight: '100dvh' }}>{children}</main>;
+    return (
+      <main
+        style={{
+          flex: 1,
+          width: '100%',
+          height: '100dvh',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {children}
+      </main>
+    );
   }
 
   // If not logged in and waiting for redirect

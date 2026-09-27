@@ -1,20 +1,21 @@
 import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { findUserByEmailInD1 } from '@/lib/db';
+import { findUserByEmailInD1, seedDatabaseIfEmpty } from '@/lib/db';
 import { normalizeEmail, verifyPassword } from '@/lib/rbac';
 
 export const runtime = 'edge';
 
-type loginRequest = {
+type LoginRequest = {
   email: string;
   password: string;
-}
+};
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as loginRequest;
+    const body = (await request.json()) as LoginRequest;
     const { env } = await getCloudflareContext({ async: true });
     const { email, password } = body;
+
     if (!email || !password) {
       return NextResponse.json(
         { success: false, message: 'Email and password are required' },
@@ -22,9 +23,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const count = await env.DB
-      .prepare("SELECT COUNT(*) as count FROM users")
-      .first();
+    // Ensure initial seed exists if DB is newly created
+    await seedDatabaseIfEmpty(env.DB);
 
     const normalized = normalizeEmail(email);
     const user = await findUserByEmailInD1(env.DB, normalized);
@@ -47,7 +47,13 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: `Welcome back, ${user.username}!`,
-      user: { id: user.id, email: user.email, username: user.username, createdAt: user.createdAt },
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        emailVerified: user.emailVerified ?? false,
+        createdAt: user.createdAt,
+      },
     });
   } catch (err) {
     return NextResponse.json(

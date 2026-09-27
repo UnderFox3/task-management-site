@@ -8,7 +8,7 @@ import NewBoardModal from './NewBoardModal';
 import { ADMIN_ID, JANE_ID, ALEX_ID } from '@/lib/store';
 
 export default function Sidebar() {
-  const { state, deleteBoard, currentUser, logout, switchUser } = useBoardContext();
+  const { state, deleteBoard, currentUser, logout, switchUser, verifyEmail } = useBoardContext();
   const pathname = usePathname();
   const router = useRouter();
   const [showNewBoard, setShowNewBoard] = useState(false);
@@ -281,8 +281,39 @@ export default function Sidebar() {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {currentUser.username}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentUser.username}
+                  </span>
+                  {currentUser.emailVerified ? (
+                    <span
+                      title="Email verified"
+                      style={{
+                        fontSize: '9px',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        background: 'rgba(34, 197, 94, 0.15)',
+                        color: '#4ade80',
+                        fontWeight: 700,
+                      }}
+                    >
+                      ✓
+                    </span>
+                  ) : (
+                    <span
+                      title="Email unverified (Demo mode active)"
+                      style={{
+                        fontSize: '9px',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        background: 'rgba(234, 179, 8, 0.15)',
+                        color: '#facc15',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Demo
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {currentUser.email}
@@ -307,6 +338,44 @@ export default function Sidebar() {
                 Sign out
               </button>
             </div>
+
+            {/* Email Verification Status / Action for Unverified */}
+            {!currentUser.emailVerified && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  background: 'rgba(234, 179, 8, 0.08)',
+                  border: '1px solid rgba(234, 179, 8, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '6px',
+                }}
+              >
+                <span style={{ fontSize: '10px', color: '#facc15', fontWeight: 600 }}>Unverified email</span>
+                <button
+                  type="button"
+                  id="sidebar-verify-btn"
+                  onClick={async () => {
+                    await verifyEmail(currentUser.id);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: 'var(--accent-400)',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Verify now
+                </button>
+              </div>
+            )}
 
             {/* Quick Test Switcher Bar */}
             <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(124, 58, 237, 0.15)' }}>
@@ -368,6 +437,29 @@ export default function Sidebar() {
                 >
                   Alex
                 </button>
+              </div>
+
+              {/* Direct Link to Sign Up / Register New Account */}
+              <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed rgba(124, 58, 237, 0.15)' }}>
+                <Link
+                  href="/signup"
+                  id="sidebar-register-link"
+                  style={{
+                    fontSize: '11px',
+                    color: 'var(--accent-400)',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    padding: '4px 0',
+                    borderRadius: '6px',
+                    background: 'rgba(124, 58, 237, 0.05)',
+                  }}
+                >
+                  <span>+ Register New Account</span>
+                </Link>
               </div>
             </div>
           </div>
