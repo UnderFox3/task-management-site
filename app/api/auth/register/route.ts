@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { findUserByEmailInD1, insertUserInD1, seedDatabaseIfEmpty } from '@/lib/db';
+import { createVerificationTokenInD1, findUserByEmailInD1, insertUserInD1, seedDatabaseIfEmpty } from '@/lib/db';
 import { hashPassword, normalizeEmail } from '@/lib/rbac';
 import { generateId } from '@/lib/store';
 import type { User } from '@/lib/types';
@@ -93,6 +93,10 @@ export async function POST(request: Request) {
     };
 
     await insertUserInD1(env.DB, newUser);
+
+    const token = await createVerificationTokenInD1(env.DB, newUser.id);
+
+    console.log(`VERIFY URL: http://localhost:3000/verify?token=${token}`);
 
     const message = isDummy
       ? 'Account created. Using a demo email address: your account remains unverified, but full site features are active for demonstration.'

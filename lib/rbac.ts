@@ -115,4 +115,8 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   return actualHex === expectedHex;
 }
 
+export function generateVerificationToken(): string {
+  return crypto.randomUUID();
+}
+
 export { normalizeEmail };

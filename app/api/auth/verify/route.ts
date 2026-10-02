@@ -7,41 +7,48 @@ export const runtime = 'edge';
 export async function POST(request: Request) {
   try {
     const { env } = await getCloudflareContext({ async: true });
-    const body = await request.json() as { userId?: string; email?: string; code?: string };
-    const { userId, email, code } = body;
+    const body = await request.json() as { token: string };
+    const { token } = body;
 
-    let targetUserId = userId;
-
-    if (!targetUserId && email) {
-      const user = await findUserByEmailInD1(env.DB, email);
-      if (user) {
-        targetUserId = user.id;
-      }
-    }
-
-    if (!targetUserId) {
+    if (!token) {
       return NextResponse.json(
-        { success: false, message: 'User ID or valid email is required' },
+        { success: false, message: 'Token is required' },
         { status: 400 }
       );
     }
 
-    // Verify code check if code was provided
-    if (code) {
-      const metaKey = `verify_code:${targetUserId}`;
-      const record = await env.DB.prepare('SELECT val FROM app_meta WHERE key = ?')
-        .bind(metaKey)
-        .first<{ val: string }>();
+    const tokenRecord = await env.DB.prepare('SELECT user_id, expires_at FROM verification_tokens WHERE token = ?')
+      .bind(token)
+      .first<{
+        user_id: string;
+        expires_at: string;
+      }>();
 
-      if (record?.val && record.val !== code.trim()) {
-        return NextResponse.json(
-          { success: false, message: 'Invalid verification code. Please check and try again.' },
-          { status: 400 }
-        );
-      }
+    console.log("TOKEN RECORD:", tokenRecord);
+
+    if (!tokenRecord) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid verification token' },
+        { status: 400 }
+      );
     }
 
+    if (new Date(tokenRecord.expires_at) < new Date()) {
+      return NextResponse.json(
+        { success: false, message: 'Verification token has expired' },
+        { status: 400 }
+      );
+    }
+
+    const targetUserId = tokenRecord.user_id;
+
+    console.log("TARGET USER:", targetUserId);
+
     await verifyUserEmailInD1(env.DB, targetUserId);
+
+    await env.DB.prepare('DELETE FROM verification_tokens WHERE token = ?').bind(token).run();
+
+    console.log("VERIFIED SUCCESSFULLY")
 
     return NextResponse.json({
       success: true,

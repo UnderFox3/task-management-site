@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
 } from 'react';
 import type { AppState, Board, BoardAccessRole, Card, Column, Priority, User } from '@/lib/types';
 import { generateId, loadState, saveState } from '@/lib/store';
@@ -271,38 +272,44 @@ const BoardContext = createContext<BoardContextValue | null>(null);
 
 export function BoardProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, null as unknown as AppState);
+  const serverStateLoaded = useRef(false);
 
   // Initialize from localStorage immediately, then fetch fresh SQLite state from /api/state
   useEffect(() => {
     const local = loadState();
+    let active = true;
     dispatch({ type: 'LOAD', payload: local });
 
     fetch('/api/state')
       .then((res) => res.ok ? (res.json() as Promise<AppState>) : null)
       .then((serverState) => {
-        if (serverState && serverState.boards) {
+        if (active && serverState && serverState.boards) {
           const currentId = local.currentUserId;
-          const merged: AppState = {
-            ...local,
+          const authoritativeState: AppState = {
             ...serverState,
-            users: { ...local.users, ...serverState.users },
-            boards: { ...local.boards, ...serverState.boards },
-            columns: { ...local.columns, ...serverState.columns },
-            cards: { ...local.cards, ...serverState.cards },
-            boardOrder: serverState.boardOrder && serverState.boardOrder.length > 0 ? serverState.boardOrder : local.boardOrder,
-            currentUserId: currentId ?? serverState.currentUserId,
+            currentUserId: currentId && serverState.users[currentId]
+              ? currentId
+              : serverState.currentUserId,
           };
-          dispatch({ type: 'LOAD', payload: merged });
-          saveState(merged);
+          dispatch({ type: 'LOAD', payload: authoritativeState });
+          saveState(authoritativeState);
+          serverStateLoaded.current = true;
         }
       })
-      .catch((err) => console.warn('Could not sync with server state, using local:', err));
+      .catch((err) => {
+        if (active) console.warn('Could not sync with server state, using local:', err);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Save changes to localStorage and push to backend SQLite
   useEffect(() => {
     if (!state) return;
     saveState(state);
+    if (!serverStateLoaded.current) return;
 
     const timer = setTimeout(() => {
       fetch('/api/state', {
@@ -512,10 +519,10 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     if (!targetId) return { success: false, message: 'No user is currently signed in.' };
 
     try {
-      const res = await fetch('/api/auth/verify', {
+      const res = await fetch('/api/auth/send-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: targetId, code }),
+        body: JSON.stringify({ userId: targetId }),
       });
       const data = (await res.json()) as { success: boolean; message: string };
       if (res.ok && data.success) {
