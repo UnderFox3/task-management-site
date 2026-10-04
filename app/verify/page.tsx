@@ -12,6 +12,8 @@ function VerifyContent() {
 
   const [state, setState] = useState<VerifyState>(token ? 'pending' : 'no-token');
   const [message, setMessage] = useState('');
+  const [canRetry, setCanRetry] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!token) return;
@@ -38,12 +40,13 @@ function VerifyContent() {
         if (cancelled) return;
         setState('error');
         setMessage('Something went wrong. Please try again later.');
+        setCanRetry(true);
       }
     }
 
     verify();
     return () => { cancelled = true; };
-  }, [token]);
+  }, [attempt, token]);
 
   return (
     <div
@@ -100,7 +103,16 @@ function VerifyContent() {
 
         {state === 'pending' && <PendingState />}
         {state === 'success' && <SuccessState message={message} />}
-        {state === 'error' && <ErrorState message={message} />}
+        {state === 'error' && (
+          <ErrorState
+            message={message}
+            onRetry={canRetry ? () => {
+              setState('pending');
+              setCanRetry(false);
+              setAttempt((current) => current + 1);
+            } : undefined}
+          />
+        )}
         {state === 'no-token' && <NoTokenState />}
       </div>
     </div>
@@ -167,7 +179,7 @@ function SuccessState({ message }: { message: string }) {
   );
 }
 
-function ErrorState({ message }: { message: string }) {
+function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <>
       <div style={iconWrapStyle('#ef4444', 'rgba(239,68,68,0.15)')}>✕</div>
@@ -185,6 +197,15 @@ function ErrorState({ message }: { message: string }) {
         {message}
       </p>
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            style={secondaryLinkStyle}
+          >
+            Try again
+          </button>
+        )}
         <Link
           href="/login"
           id="verify-error-login"

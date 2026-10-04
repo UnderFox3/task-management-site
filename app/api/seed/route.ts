@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { seedDatabaseIfEmpty } from '@/lib/db';
 
-export const runtime = 'edge';
-
 export async function GET() {
   try {
     const { env } = await getCloudflareContext({ async: true });

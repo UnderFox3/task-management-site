@@ -8,13 +8,16 @@ import NewBoardModal from './NewBoardModal';
 import { ADMIN_ID, JANE_ID, ALEX_ID } from '@/lib/store';
 
 export default function Sidebar() {
-  const { state, deleteBoard, currentUser, logout, switchUser, verifyEmail } = useBoardContext();
+  const { state, deleteBoard, currentUser, logout, switchUser, sendVerificationEmail } = useBoardContext();
   const pathname = usePathname();
   const router = useRouter();
   const [showNewBoard, setShowNewBoard] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [sendingVerification, setSendingVerification] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
+  const [verificationSent, setVerificationSent] = useState<boolean | null>(null);
 
   // My boards: owned or explicitly invited
   const myBoards = state.boardOrder.filter((boardId) => {
@@ -358,23 +361,51 @@ export default function Sidebar() {
                 <button
                   type="button"
                   id="sidebar-verify-btn"
+                  disabled={sendingVerification}
                   onClick={async () => {
-                    await verifyEmail(currentUser.id);
+                    setSendingVerification(true);
+                    setVerificationMessage('');
+                    setVerificationSent(null);
+                    try {
+                      const result = await sendVerificationEmail(currentUser.id);
+                      setVerificationMessage(result.message);
+                      setVerificationSent(result.success);
+                    } catch {
+                      setVerificationMessage('Unable to send the verification email. Please try again.');
+                      setVerificationSent(false);
+                    } finally {
+                      setSendingVerification(false);
+                    }
                   }}
                   style={{
                     background: 'none',
                     border: 'none',
                     padding: 0,
-                    color: 'var(--accent-400)',
+                    color: sendingVerification ? 'var(--text-muted)' : 'var(--accent-400)',
                     fontSize: '10px',
                     fontWeight: 700,
-                    cursor: 'pointer',
+                    cursor: sendingVerification ? 'wait' : 'pointer',
                     textDecoration: 'underline',
                   }}
                 >
-                  Verify now
+                  {sendingVerification ? 'Sending…' : 'Send verification email'}
                 </button>
               </div>
+            )}
+            {verificationMessage && !currentUser.emailVerified && (
+              <p
+                role="status"
+                style={{
+                  margin: '6px 2px 0',
+                  color: verificationSent
+                    ? '#4ade80'
+                    : 'var(--text-secondary)',
+                  fontSize: '10px',
+                  lineHeight: 1.4,
+                }}
+              >
+                {verificationMessage}
+              </p>
             )}
 
             {/* Quick Test Switcher Bar */}

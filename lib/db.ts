@@ -444,14 +444,15 @@ export async function verifyUserEmailInD1(db: D1Database, userId: string): Promi
     .run();
 }
 
-const createdAt = new Date().toISOString();
-
 export async function createVerificationTokenInD1(db: D1Database, userId: string): Promise<string> {
   const token = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  await db.prepare('INSERT INTO verification_tokens (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
-    .bind(token, userId, expiresAt, createdAt)
-    .run();
+  const createdAt = new Date().toISOString();
+  await db.batch([
+    db.prepare('DELETE FROM verification_tokens WHERE user_id = ?').bind(userId),
+    db.prepare('INSERT INTO verification_tokens (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
+      .bind(token, userId, expiresAt, createdAt),
+  ]);
   return token;
 }
 
@@ -470,4 +471,3 @@ export async function getVerificationTokenInD1(db: D1Database, token: string): P
 export async function deleteVerificationTokenInD1(db: D1Database, token: string): Promise<void> {
   await db.prepare('DELETE FROM verification_tokens WHERE token = ?').bind(token).run();
 }
-

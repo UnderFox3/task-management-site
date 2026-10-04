@@ -3,8 +3,6 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getFullStateFromD1, saveFullStateToD1, seedDatabaseIfEmpty } from '@/lib/db';
 import type { AppState } from '@/lib/types';
 
-export const runtime = 'edge';
-
 export async function GET() {
   try {
     const { env } = await getCloudflareContext({ async: true });

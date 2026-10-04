@@ -3,8 +3,6 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { findUserByEmailInD1, seedDatabaseIfEmpty } from '@/lib/db';
 import { normalizeEmail, verifyPassword } from '@/lib/rbac';
 
-export const runtime = 'edge';
-
 type LoginRequest = {
   email: string;
   password: string;

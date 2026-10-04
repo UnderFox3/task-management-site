@@ -4,33 +4,18 @@ import { createVerificationTokenInD1, findUserByEmailInD1, insertUserInD1, seedD
 import { hashPassword, normalizeEmail } from '@/lib/rbac';
 import { generateId } from '@/lib/store';
 import type { User } from '@/lib/types';
-
-export const runtime = 'edge';
+import {
+  createVerificationUrl,
+  getVerificationEmailSettings,
+  isDummyEmail,
+  sendVerificationEmail,
+} from '@/lib/email-verification';
 
 type RegisterRequest = {
   email: string;
   username: string;
   password: string;
 };
-
-function isDummyEmail(email: string): boolean {
-  const dummyDomains = [
-    'example.com',
-    'example.org',
-    'example.net',
-    'test.com',
-    'dummy.com',
-    'fake.com',
-    'itask.local',
-    'localhost',
-    'mailinator.com',
-    'tempmail.com',
-  ];
-  const parts = email.toLowerCase().split('@');
-  if (parts.length !== 2) return true;
-  const domain = parts[1];
-  return dummyDomains.some((d) => domain === d || domain.endsWith('.' + d)) || !domain.includes('.');
-}
 
 export async function POST(request: Request) {
   try {
@@ -76,12 +61,6 @@ export async function POST(request: Request) {
     const userId = generateId();
     const isDummy = isDummyEmail(normalized);
 
-    // Generate a 6-digit verification code
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    await env.DB.prepare('INSERT OR REPLACE INTO app_meta (key, val) VALUES (?, ?)')
-      .bind(`verify_code:${userId}`, verificationCode)
-      .run();
-
     const hashedPassword = await hashPassword(password);
     const newUser: User = {
       id: userId,
@@ -94,18 +73,38 @@ export async function POST(request: Request) {
 
     await insertUserInD1(env.DB, newUser);
 
-    const token = await createVerificationTokenInD1(env.DB, newUser.id);
-
-    console.log(`VERIFY URL: http://localhost:3000/verify?token=${token}`);
-
-    const message = isDummy
-      ? 'Account created. Using a demo email address: your account remains unverified, but full site features are active for demonstration.'
-      : `Account created successfully! Verification code: ${verificationCode}`;
+    let emailSent = false;
+    let message: string;
+    if (isDummy) {
+      message = 'Account created with a demo email address. Verification emails are disabled for demo addresses.';
+    } else {
+      const settings = getVerificationEmailSettings(env);
+      if (!settings.apiKey || !settings.appUrl) {
+        message = 'Account created, but verification email is not configured. Please request an email again later.';
+      } else {
+        try {
+          const token = await createVerificationTokenInD1(env.DB, newUser.id);
+          const verificationUrl = createVerificationUrl(settings.appUrl, token);
+          await sendVerificationEmail(
+            settings.apiKey,
+            settings.from,
+            newUser.email,
+            newUser.username,
+            verificationUrl,
+          );
+          emailSent = true;
+          message = `Account created successfully! A verification email was sent to ${newUser.email}.`;
+        } catch (error) {
+          console.error('Failed to create or send registration verification email:', error);
+          message = 'Account created, but verification could not be started. Please request another email later.';
+        }
+      }
+    }
 
     return NextResponse.json({
       success: true,
       message,
-      verificationCode,
+      emailSent,
       user: {
         id: newUser.id,
         email: newUser.email,

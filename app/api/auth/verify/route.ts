@@ -1,16 +1,23 @@
 import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { verifyUserEmailInD1, findUserByEmailInD1 } from '@/lib/db';
-
-export const runtime = 'edge';
+import { verifyUserEmailInD1 } from '@/lib/db';
 
 export async function POST(request: Request) {
+  let body: { token?: unknown };
+  try {
+    body = await request.json() as { token?: unknown };
+  } catch {
+    return NextResponse.json(
+      { success: false, message: 'A valid JSON request body is required.' },
+      { status: 400 }
+    );
+  }
+
   try {
     const { env } = await getCloudflareContext({ async: true });
-    const body = await request.json() as { token: string };
-    const { token } = body;
+    const token = body.token;
 
-    if (!token) {
+    if (typeof token !== 'string' || !token.trim()) {
       return NextResponse.json(
         { success: false, message: 'Token is required' },
         { status: 400 }
@@ -23,8 +30,6 @@ export async function POST(request: Request) {
         user_id: string;
         expires_at: string;
       }>();
-
-    console.log("TOKEN RECORD:", tokenRecord);
 
     if (!tokenRecord) {
       return NextResponse.json(
@@ -41,14 +46,8 @@ export async function POST(request: Request) {
     }
 
     const targetUserId = tokenRecord.user_id;
-
-    console.log("TARGET USER:", targetUserId);
-
     await verifyUserEmailInD1(env.DB, targetUserId);
-
     await env.DB.prepare('DELETE FROM verification_tokens WHERE token = ?').bind(token).run();
-
-    console.log("VERIFIED SUCCESSFULLY")
 
     return NextResponse.json({
       success: true,
@@ -56,8 +55,9 @@ export async function POST(request: Request) {
       userId: targetUserId,
     });
   } catch (err) {
+    console.error('Failed to verify email:', err);
     return NextResponse.json(
-      { success: false, message: 'Failed to verify email', details: String(err) },
+      { success: false, message: 'Failed to verify email.' },
       { status: 500 }
     );
   }

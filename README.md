@@ -37,6 +37,47 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 # TaskManager
 
+## Email verification and Cloudflare deployment
+
+Verification emails are sent through Resend. For local development, set these
+values in `.env.local`:
+
+```env
+RESEND_API_KEY=re_your_api_key
+APP_URL=http://localhost:3000
+RESEND_FROM_EMAIL="Task Manager <onboarding@resend.dev>"
+```
+
+Resend's `onboarding@resend.dev` sender is for testing with an allowed recipient.
+For real users, verify a sending domain in Resend and set `RESEND_FROM_EMAIL` to
+an address on that domain.
+
+Before deploying:
+
+On Windows, run the Cloudflare build and deploy from WSL. OpenNext may fail on
+Windows when it creates the symlinks required for its Worker bundle.
+
+1. Configure `APP_URL` as the public HTTPS URL for the app and
+   `RESEND_FROM_EMAIL` as an address on your verified Resend domain. Set these
+   as Cloudflare Worker variables (or through the Cloudflare dashboard).
+2. Store the API key as a Worker secret:
+
+   ```sh
+   pnpm exec wrangler secret put RESEND_API_KEY
+   ```
+
+3. Apply pending D1 migrations to the production database:
+
+   ```sh
+   pnpm exec wrangler d1 migrations apply itask-db --remote
+   ```
+
+4. Build and deploy the Cloudflare Worker:
+
+   ```sh
+   pnpm deploy:cloudflare
+   ```
+
 
 
 ## Getting started
