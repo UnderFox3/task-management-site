@@ -31,8 +31,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Ensure database is seeded if fresh
-    await seedDatabaseIfEmpty(env.DB);
+    await seedDatabaseIfEmpty(env.DB, env.ENABLE_LOCAL_DEMO_SEED === 'true');
 
     // Check duplicate email
     const existing = await findUserByEmailInD1(env.DB, normalized);

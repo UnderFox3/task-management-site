@@ -123,7 +123,12 @@ interface CardRow {
 // ---------------------------------------------------------------------------
 // Seed database with dummy data (idempotent — skips if users already exist)
 // ---------------------------------------------------------------------------
-export async function seedDatabaseIfEmpty(db: D1Database): Promise<{ seeded: boolean }> {
+export async function seedDatabaseIfEmpty(
+  db: D1Database,
+  enabled = false,
+): Promise<{ seeded: boolean }> {
+  if (!enabled) return { seeded: false };
+
   const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
 
   if ((userCount?.count ?? 0) > 0) {
@@ -192,13 +197,11 @@ export async function seedDatabaseIfEmpty(db: D1Database): Promise<{ seeded: boo
 // ---------------------------------------------------------------------------
 // Read the full app state from D1
 // ---------------------------------------------------------------------------
-export async function getFullStateFromD1(db: D1Database): Promise<AppState> {
-  // Ensure default seed exists if the database is fresh
+export async function getFullStateFromD1(db: D1Database, enableDemoSeed = false): Promise<AppState> {
   const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
-  console.log("CURRENT USER COUNT: ", userCount?.count);
 
-  if ((userCount?.count ?? 0) === 0) {
-    await seedDatabaseIfEmpty(db);
+  if (enableDemoSeed && (userCount?.count ?? 0) === 0) {
+    await seedDatabaseIfEmpty(db, true);
   }
 
   const [usersResult, boardsResult, membersResult, columnsResult, cardsResult, metaResult] = await Promise.all([

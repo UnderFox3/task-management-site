@@ -6,6 +6,7 @@ declare global {
     RESEND_API_KEY?: string;
     RESEND_FROM_EMAIL?: string;
     APP_URL?: string;
+    ENABLE_LOCAL_DEMO_SEED?: string;
   }
 }
 

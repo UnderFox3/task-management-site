@@ -5,16 +5,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useBoardContext } from '@/app/providers/BoardProvider';
 import NewBoardModal from './NewBoardModal';
-import { ADMIN_ID, JANE_ID, ALEX_ID } from '@/lib/store';
 
 export default function Sidebar() {
-  const { state, deleteBoard, currentUser, logout, switchUser, sendVerificationEmail } = useBoardContext();
+  const { state, deleteBoard, currentUser, logout, sendVerificationEmail } = useBoardContext();
   const pathname = usePathname();
   const router = useRouter();
   const [showNewBoard, setShowNewBoard] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState('');
   const [verificationSent, setVerificationSent] = useState<boolean | null>(null);
@@ -270,7 +268,7 @@ export default function Sidebar() {
           </button>
         </div>
 
-        {/* ── User Profile & Quick Switcher ── */}
+        {/* ── User Profile ── */}
         {!collapsed && currentUser && (
           <div
             style={{
@@ -408,91 +406,6 @@ export default function Sidebar() {
               </p>
             )}
 
-            {/* Quick Test Switcher Bar */}
-            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(124, 58, 237, 0.15)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Switch Account:
-              </div>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  type="button"
-                  onClick={() => switchUser(ADMIN_ID)}
-                  style={{
-                    flex: 1,
-                    padding: '4px 6px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: '1px solid var(--border-medium)',
-                    background: currentUser.id === ADMIN_ID ? 'var(--accent-500)' : 'var(--bg-subtle)',
-                    color: currentUser.id === ADMIN_ID ? '#fff' : 'var(--text-secondary)',
-                  }}
-                  title="Switch to Admin"
-                >
-                  Admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchUser(JANE_ID)}
-                  style={{
-                    flex: 1,
-                    padding: '4px 6px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: '1px solid var(--border-medium)',
-                    background: currentUser.id === JANE_ID ? 'var(--accent-500)' : 'var(--bg-subtle)',
-                    color: currentUser.id === JANE_ID ? '#fff' : 'var(--text-secondary)',
-                  }}
-                  title="Switch to Jane"
-                >
-                  Jane
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchUser(ALEX_ID)}
-                  style={{
-                    flex: 1,
-                    padding: '4px 6px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: '1px solid var(--border-medium)',
-                    background: currentUser.id === ALEX_ID ? 'var(--accent-500)' : 'var(--bg-subtle)',
-                    color: currentUser.id === ALEX_ID ? '#fff' : 'var(--text-secondary)',
-                  }}
-                  title="Switch to Alex"
-                >
-                  Alex
-                </button>
-              </div>
-
-              {/* Direct Link to Sign Up / Register New Account */}
-              <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed rgba(124, 58, 237, 0.15)' }}>
-                <Link
-                  href="/signup"
-                  id="sidebar-register-link"
-                  style={{
-                    fontSize: '11px',
-                    color: 'var(--accent-400)',
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '4px',
-                    padding: '4px 0',
-                    borderRadius: '6px',
-                    background: 'rgba(124, 58, 237, 0.05)',
-                  }}
-                >
-                  <span>+ Register New Account</span>
-                </Link>
-              </div>
-            </div>
           </div>
         )}
 

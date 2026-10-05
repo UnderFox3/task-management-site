@@ -124,33 +124,35 @@ export function createSeedData(): AppState {
 }
 
 export function loadState(): AppState {
-  if (typeof window === 'undefined') return createSeedData();
+  const initialState: AppState = process.env.NODE_ENV === 'development'
+    ? createSeedData()
+    : { currentUserId: null, users: {}, boards: {}, columns: {}, cards: {}, boardOrder: [] };
+
+  if (typeof window === 'undefined') return initialState;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const seed = createSeedData();
 
     if (!raw) {
-      saveState(seed);
-      return seed;
+      saveState(initialState);
+      return initialState;
     }
 
     const parsed = JSON.parse(raw) as Partial<AppState>;
     const nextState: AppState = {
-      ...seed,
+      ...initialState,
       ...parsed,
-      users: { ...seed.users, ...(parsed.users ?? {}) },
-      boards: { ...seed.boards, ...(parsed.boards ?? {}) },
-      columns: { ...seed.columns, ...(parsed.columns ?? {}) },
-      cards: { ...seed.cards, ...(parsed.cards ?? {}) },
-      boardOrder: parsed.boardOrder ?? seed.boardOrder,
-      currentUserId: parsed.currentUserId !== undefined ? parsed.currentUserId : seed.currentUserId,
+      users: { ...initialState.users, ...(parsed.users ?? {}) },
+      boards: { ...initialState.boards, ...(parsed.boards ?? {}) },
+      columns: { ...initialState.columns, ...(parsed.columns ?? {}) },
+      cards: { ...initialState.cards, ...(parsed.cards ?? {}) },
+      boardOrder: parsed.boardOrder ?? initialState.boardOrder,
+      currentUserId: parsed.currentUserId !== undefined ? parsed.currentUserId : initialState.currentUserId,
     };
 
     return nextState;
   } catch {
-    const seed = createSeedData();
-    saveState(seed);
-    return seed;
+    saveState(initialState);
+    return initialState;
   }
 }
 

@@ -21,8 +21,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Ensure initial seed exists if DB is newly created
-    await seedDatabaseIfEmpty(env.DB);
+    await seedDatabaseIfEmpty(env.DB, env.ENABLE_LOCAL_DEMO_SEED === 'true');
 
     const normalized = normalizeEmail(email);
     const user = await findUserByEmailInD1(env.DB, normalized);

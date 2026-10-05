@@ -28,7 +28,6 @@ interface BoardContextValue {
   register: (email: string, username: string, password: string) => Promise<LoginResult>;
   sendVerificationEmail: (userId?: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
-  switchUser: (userId: string) => void;
   inviteUserToBoard: (boardId: string, email: string, role?: BoardAccessRole) => { success: boolean; message: string };
   addBoard: (title: string, accent: string, visibility?: 'public' | 'private') => string;
   updateBoard: (boardId: string, changes: Partial<Pick<Board, 'title' | 'accent' | 'visibility'>>) => void;
@@ -521,10 +520,6 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state?.currentUserId]);
 
-  const switchUser = useCallback((userId: string) => {
-    dispatch({ type: 'SET_CURRENT_USER', currentUserId: userId });
-  }, []);
-
   const logout = useCallback(() => {
     dispatch({ type: 'SET_CURRENT_USER', currentUserId: null });
   }, []);
@@ -592,7 +587,6 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         register,
         sendVerificationEmail,
         logout,
-        switchUser,
         inviteUserToBoard,
         addBoard,
         updateBoard,

@@ -42,12 +42,6 @@ function LoginForm() {
     }
   }
 
-  function handleQuickLogin(accountEmail: string) {
-    setEmail(accountEmail);
-    setPassword('Admin@123');
-    handleLogin(accountEmail, 'Admin@123');
-  }
-
   const signupLink = (`/signup${redirectTarget !== '/' ? `?redirect=${encodeURIComponent(redirectTarget)}` : ''}`) as Route;
 
   return (
@@ -148,66 +142,6 @@ function LoginForm() {
           <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.4 }}>
             Sign in to access your boards and collaborate with your team.
           </p>
-        </div>
-
-        {/* Quick Demo Accounts */}
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              fontSize: '10px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: 'var(--text-muted)',
-              marginBottom: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <span>⚡ Quick Demo Switcher</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-            <button
-              type="button"
-              id="quick-login-admin"
-              onClick={() => handleQuickLogin('admin@itask.local')}
-              disabled={isSubmitting}
-              style={quickBtnStyle}
-              title="admin@itask.local (Board creator/Admin)"
-            >
-              <span style={{ fontSize: '13px' }}>👑</span>
-              <span style={{ fontWeight: 700, fontSize: '11px' }}>Admin</span>
-            </button>
-            <button
-              type="button"
-              id="quick-login-jane"
-              onClick={() => handleQuickLogin('jane@itask.local')}
-              disabled={isSubmitting}
-              style={quickBtnStyle}
-              title="jane@itask.local (Non-admin member)"
-            >
-              <span style={{ fontSize: '13px' }}>👤</span>
-              <span style={{ fontWeight: 700, fontSize: '11px' }}>Jane</span>
-            </button>
-            <button
-              type="button"
-              id="quick-login-alex"
-              onClick={() => handleQuickLogin('alex@itask.local')}
-              disabled={isSubmitting}
-              style={quickBtnStyle}
-              title="alex@itask.local (Guest / viewer)"
-            >
-              <span style={{ fontSize: '13px' }}>👤</span>
-              <span style={{ fontWeight: 700, fontSize: '11px' }}>Alex</span>
-            </button>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0', gap: '10px' }}>
-          <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>or with credentials</span>
-          <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
         </div>
 
         {/* Login Form */}
@@ -316,19 +250,4 @@ const inputStyles: React.CSSProperties = {
   outline: 'none',
   fontFamily: 'inherit',
   boxSizing: 'border-box',
-};
-
-const quickBtnStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '3px',
-  padding: '8px 6px',
-  borderRadius: '10px',
-  border: '1px solid var(--border-medium)',
-  background: 'var(--bg-subtle)',
-  color: 'var(--text-primary)',
-  cursor: 'pointer',
-  transition: 'all 0.15s ease',
 };

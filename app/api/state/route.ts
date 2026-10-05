@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { getFullStateFromD1, saveFullStateToD1, seedDatabaseIfEmpty } from '@/lib/db';
+import { getFullStateFromD1, saveFullStateToD1 } from '@/lib/db';
 import type { AppState } from '@/lib/types';
 
 export async function GET() {
   try {
     const { env } = await getCloudflareContext({ async: true });
-    await seedDatabaseIfEmpty(env.DB);
-    const state = await getFullStateFromD1(env.DB);
+    const state = await getFullStateFromD1(env.DB, env.ENABLE_LOCAL_DEMO_SEED === 'true');
     return NextResponse.json(state);
   } catch (err) {
     return NextResponse.json(

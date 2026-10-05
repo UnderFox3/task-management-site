@@ -8,7 +8,7 @@ import { useBoardContext } from '@/app/providers/BoardProvider';
 import { Route } from 'next';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { currentUser, isBoardAccessible, state, switchUser, logout } = useBoardContext();
+  const { currentUser, isBoardAccessible, state, logout } = useBoardContext();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -99,7 +99,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 cursor: 'pointer',
               }}
             >
-              Switch Account
+              Sign out
             </button>
           </div>
         </div>

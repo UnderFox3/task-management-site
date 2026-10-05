@@ -48,6 +48,12 @@ APP_URL=http://localhost:3000
 RESEND_FROM_EMAIL="Task Manager <onboarding@resend.dev>"
 ```
 
+Demo users, boards, and cards are seeded only when `ENABLE_LOCAL_DEMO_SEED=true`
+is present in the local Cloudflare runtime environment. Copy `.dev.vars.example`
+to `.dev.vars` for local Cloudflare development; do not set this flag in
+production Worker variables. Production starts with an empty database until
+real users and boards are created.
+
 Resend's `onboarding@resend.dev` sender is for testing with an allowed recipient.
 For real users, verify a sending domain in Resend and set `RESEND_FROM_EMAIL` to
 an address on that domain.
