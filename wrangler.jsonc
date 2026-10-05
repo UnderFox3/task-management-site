@@ -25,5 +25,12 @@
   ],
   "images": {
     "binding": "IMAGES"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "itask-db",
+      "database_id": "08762242-542e-4d2a-ab00-3d9037c0a073"
+    }
+  ]
 }

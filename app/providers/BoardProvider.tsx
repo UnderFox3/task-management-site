@@ -5,36 +5,47 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useReducer,
+  useRef,
 } from 'react';
-import type { AppState, Board, Card, Column, Priority } from '@/lib/types';
+import type { AppState, Board, BoardAccessRole, Card, Column, Priority, User } from '@/lib/types';
 import { generateId, loadState, saveState } from '@/lib/store';
+import { canAccessBoard, normalizeEmail, verifyPassword, hashPassword, getEffectiveRole } from '@/lib/rbac';
 
-// ─── Context Types ──────────────────────────────────────────────────────────
+interface LoginResult {
+  success: boolean;
+  message: string;
+}
 
 interface BoardContextValue {
   state: AppState;
-  // Board operations
-  addBoard: (title: string, accent: string) => string;
-  updateBoard: (boardId: string, changes: Partial<Pick<Board, 'title' | 'accent'>>) => void;
+  currentUser: User | null;
+  isBoardAccessible: (boardId: string) => boolean;
+  canManageBoard: (boardId: string, minimumRole?: BoardAccessRole) => boolean;
+  getBoardRole: (boardId: string) => BoardAccessRole | null;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  register: (email: string, username: string, password: string) => Promise<LoginResult>;
+  sendVerificationEmail: (userId?: string) => Promise<{ success: boolean; message: string }>;
+  logout: () => void;
+  inviteUserToBoard: (boardId: string, email: string, role?: BoardAccessRole) => { success: boolean; message: string };
+  addBoard: (title: string, accent: string, visibility?: 'public' | 'private') => string;
+  updateBoard: (boardId: string, changes: Partial<Pick<Board, 'title' | 'accent' | 'visibility'>>) => void;
   deleteBoard: (boardId: string) => void;
-  // Column operations
   addColumn: (boardId: string, title: string) => void;
   updateColumn: (columnId: string, title: string) => void;
   deleteColumn: (boardId: string, columnId: string) => void;
-  // Card operations
   addCard: (columnId: string, title: string) => string;
   updateCard: (cardId: string, changes: Partial<Omit<Card, 'id' | 'createdAt'>>) => void;
   deleteCard: (columnId: string, cardId: string) => void;
-  // Drag & Drop
   moveColumn: (boardId: string, fromColumnId: string, toIndex: number) => void;
   moveCard: (cardId: string, fromColumnId: string, toColumnId: string, toIndex: number) => void;
 }
 
-// ─── Reducer ────────────────────────────────────────────────────────────────
-
 type Action =
   | { type: 'LOAD'; payload: AppState }
+  | { type: 'SET_CURRENT_USER'; currentUserId: string | null }
+  | { type: 'ADD_USER'; user: User }
   | { type: 'ADD_BOARD'; board: Board }
   | { type: 'UPDATE_BOARD'; boardId: string; changes: Partial<Board> }
   | { type: 'DELETE_BOARD'; boardId: string }
@@ -45,31 +56,35 @@ type Action =
   | { type: 'UPDATE_CARD'; cardId: string; changes: Partial<Card> }
   | { type: 'DELETE_CARD'; columnId: string; cardId: string }
   | { type: 'MOVE_COLUMN'; boardId: string; fromColumnId: string; toIndex: number }
-  | { type: 'MOVE_CARD'; cardId: string; fromColumnId: string; toColumnId: string; toIndex: number };
+  | { type: 'MOVE_CARD'; cardId: string; fromColumnId: string; toColumnId: string; toIndex: number }
+  | { type: 'INVITE_USER'; boardId: string; userId: string; role: BoardAccessRole };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'LOAD':
       return action.payload;
-
+    case 'SET_CURRENT_USER':
+      return { ...state, currentUserId: action.currentUserId };
+    case 'ADD_USER':
+      return { ...state, users: { ...state.users, [action.user.id]: action.user }, currentUserId: action.user.id };
     case 'ADD_BOARD': {
       return {
         ...state,
         boards: { ...state.boards, [action.board.id]: action.board },
-        boardOrder: [...state.boardOrder, action.board.id],
+        boardOrder: state.boardOrder.includes(action.board.id) ? state.boardOrder : [...state.boardOrder, action.board.id],
       };
     }
-
     case 'UPDATE_BOARD': {
+      const existingBoard = state.boards[action.boardId];
+      if (!existingBoard) return state;
       return {
         ...state,
         boards: {
           ...state.boards,
-          [action.boardId]: { ...state.boards[action.boardId], ...action.changes },
+          [action.boardId]: { ...existingBoard, ...action.changes },
         },
       };
     }
-
     case 'DELETE_BOARD': {
       const board = state.boards[action.boardId];
       if (!board) return state;
@@ -92,7 +107,6 @@ function reducer(state: AppState, action: Action): AppState {
         boardOrder: state.boardOrder.filter((id) => id !== action.boardId),
       };
     }
-
     case 'ADD_COLUMN': {
       return {
         ...state,
@@ -106,7 +120,6 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-
     case 'UPDATE_COLUMN': {
       return {
         ...state,
@@ -116,7 +129,6 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-
     case 'DELETE_COLUMN': {
       const col = state.columns[action.columnId];
       if (!col) return state;
@@ -139,7 +151,6 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-
     case 'ADD_CARD': {
       return {
         ...state,
@@ -153,7 +164,6 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-
     case 'UPDATE_CARD': {
       return {
         ...state,
@@ -163,7 +173,6 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-
     case 'DELETE_CARD': {
       const newCards = { ...state.cards };
       delete newCards[action.cardId];
@@ -181,19 +190,15 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-
     case 'MOVE_COLUMN': {
       const { boardId, fromColumnId, toIndex } = action;
       const board = state.boards[boardId];
       if (!board) return state;
-
       const currentIndex = board.columnIds.indexOf(fromColumnId);
       if (currentIndex === -1) return state;
-
       const nextColumnIds = [...board.columnIds];
       const [moved] = nextColumnIds.splice(currentIndex, 1);
       nextColumnIds.splice(toIndex, 0, moved);
-
       return {
         ...state,
         boards: {
@@ -202,15 +207,12 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-
     case 'MOVE_CARD': {
       const { cardId, fromColumnId, toColumnId, toIndex } = action;
       const fromCol = state.columns[fromColumnId];
       const toCol = state.columns[toColumnId];
       if (!fromCol || !toCol) return state;
-
       const fromCardIds = fromCol.cardIds.filter((id) => id !== cardId);
-
       let toCardIds: string[];
       if (fromColumnId === toColumnId) {
         toCardIds = [...fromCardIds];
@@ -218,7 +220,6 @@ function reducer(state: AppState, action: Action): AppState {
         toCardIds = toCol.cardIds.filter((id) => id !== cardId);
       }
       toCardIds.splice(toIndex, 0, cardId);
-
       return {
         ...state,
         columns: {
@@ -228,50 +229,299 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-
+    case 'INVITE_USER': {
+      const board = state.boards[action.boardId];
+      if (!board) return state;
+      return {
+        ...state,
+        boards: {
+          ...state.boards,
+          [action.boardId]: {
+            ...board,
+            members: {
+              ...board.members,
+              [action.userId]: {
+                userId: action.userId,
+                role: action.role,
+                invitedAt: new Date().toISOString(),
+              },
+            },
+          },
+        },
+      };
+    }
     default:
       return state;
   }
 }
 
-// ─── Context ────────────────────────────────────────────────────────────────
-
 const BoardContext = createContext<BoardContextValue | null>(null);
 
 export function BoardProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, null as unknown as AppState);
+  const serverStateLoaded = useRef(false);
 
-  // Load from localStorage on mount
+  // Initialize from localStorage immediately, then fetch fresh SQLite state from /api/state
   useEffect(() => {
-    dispatch({ type: 'LOAD', payload: loadState() });
+    const local = loadState();
+    let active = true;
+    dispatch({ type: 'LOAD', payload: local });
+
+    fetch('/api/state')
+      .then((res) => res.ok ? (res.json() as Promise<AppState>) : null)
+      .then((serverState) => {
+        if (active && serverState && serverState.boards) {
+          const currentId = local.currentUserId;
+          const authoritativeState: AppState = {
+            ...serverState,
+            currentUserId: currentId && serverState.users[currentId]
+              ? currentId
+              : serverState.currentUserId,
+          };
+          dispatch({ type: 'LOAD', payload: authoritativeState });
+          saveState(authoritativeState);
+          serverStateLoaded.current = true;
+        }
+      })
+      .catch((err) => {
+        if (active) console.warn('Could not sync with server state, using local:', err);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Persist to localStorage on every state change (after initial load)
+  // Save changes to localStorage and push to backend SQLite
   useEffect(() => {
-    if (state) saveState(state);
+    if (!state) return;
+    saveState(state);
+    if (!serverStateLoaded.current) return;
+
+    const timer = setTimeout(() => {
+      fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state),
+      }).catch(() => { });
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [state]);
 
-  const addBoard = useCallback((title: string, accent: string): string => {
+  const currentUser = useMemo(() => {
+    if (!state?.currentUserId) return null;
+    return state.users[state.currentUserId] ?? null;
+  }, [state]);
+
+  const getBoardRole = useCallback((boardId: string): BoardAccessRole | null => {
+    const board = state?.boards[boardId];
+    if (!board) return null;
+    return getEffectiveRole(state.currentUserId, board.members, board.visibility, board.ownerId);
+  }, [state]);
+
+  const isBoardAccessible = useCallback((boardId: string) => {
+    const board = state?.boards[boardId];
+    if (!board) return false;
+    return canAccessBoard(state.currentUserId, board.visibility, board.members, board.ownerId);
+  }, [state]);
+
+  const canManageBoard = useCallback((boardId: string, minimumRole: BoardAccessRole = 'owner') => {
+    const board = state?.boards[boardId];
+    if (!board) return false;
+    const role = getBoardRole(boardId);
+    if (!role) return false;
+    const roleOrder: Record<BoardAccessRole, number> = { owner: 3, editor: 2, viewer: 1 };
+    return roleOrder[role] >= roleOrder[minimumRole];
+  }, [state, getBoardRole]);
+
+  const deleteBoard = useCallback((boardId: string) => {
+    dispatch({ type: 'DELETE_BOARD', boardId });
+  }, []);
+
+  const addBoard = useCallback((title: string, accent: string, visibility: 'public' | 'private' = 'private'): string => {
+    if (!state?.currentUserId) return '';
+    const boardId = generateId();
     const board: Board = {
-      id: generateId(),
+      id: boardId,
       title,
       accent,
       columnIds: [],
       createdAt: new Date().toISOString(),
+      ownerId: state.currentUserId,
+      visibility,
+      members: {
+        [state.currentUserId]: {
+          userId: state.currentUserId,
+          role: 'owner',
+          invitedAt: new Date().toISOString(),
+        },
+      },
     };
     dispatch({ type: 'ADD_BOARD', board });
     return board.id;
-  }, []);
+  }, [state]);
 
   const updateBoard = useCallback(
-    (boardId: string, changes: Partial<Pick<Board, 'title' | 'accent'>>) => {
+    (boardId: string, changes: Partial<Pick<Board, 'title' | 'accent' | 'visibility'>>) => {
       dispatch({ type: 'UPDATE_BOARD', boardId, changes });
     },
     []
   );
 
-  const deleteBoard = useCallback((boardId: string) => {
-    dispatch({ type: 'DELETE_BOARD', boardId });
+  const inviteUserToBoard = useCallback((boardId: string, email: string, role: BoardAccessRole = 'viewer') => {
+    const board = state?.boards[boardId];
+    if (!board || !state.currentUserId) {
+      return { success: false, message: 'You are not signed in.' };
+    }
+
+    const isOwner = board.ownerId === state.currentUserId || board.members[state.currentUserId]?.role === 'owner';
+    if (!isOwner) {
+      return { success: false, message: 'Only the board owner can invite collaborators.' };
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    const user = Object.values(state.users).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
+    if (!user) {
+      return { success: false, message: 'No user found with that email address.' };
+    }
+
+    dispatch({ type: 'INVITE_USER', boardId, userId: user.id, role });
+    return { success: true, message: `${user.username} has been invited as a ${role}.` };
+  }, [state]);
+
+  type loginApiResponse = {
+    success: boolean;
+    message: string;
+    user?: {
+      id: string;
+      email: string;
+      username: string;
+      emailVerified?: boolean;
+      createdAt: string;
+    };
+  };
+
+  const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
+    const normalizedEmail = normalizeEmail(email);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, password }),
+      });
+      const data = (await res.json()) as loginApiResponse;
+      if (res.ok && data.success && data.user) {
+        const loggedInUser: User = {
+          id: data.user.id,
+          email: data.user.email,
+          username: data.user.username,
+          passwordHash: '',
+          emailVerified: data.user.emailVerified ?? false,
+          createdAt: data.user.createdAt,
+        };
+        dispatch({ type: 'ADD_USER', user: loggedInUser });
+        return { success: true, message: data.message };
+      } else if (data && data.message) {
+        return { success: false, message: data.message };
+      }
+    } catch {
+      // offline fallback
+    }
+
+    const user = Object.values(state?.users ?? {}).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
+    if (!user) return { success: false, message: 'No account was found for that email.' };
+
+    const valid = await verifyPassword(password, user.passwordHash);
+    if (!valid) return { success: false, message: 'Incorrect password.' };
+
+    dispatch({ type: 'SET_CURRENT_USER', currentUserId: user.id });
+    return { success: true, message: `Welcome back, ${user.username}!` };
+  }, [state]);
+
+  type registerApiResponse = {
+    success: boolean;
+    message: string;
+    user?: {
+      id: string;
+      email: string;
+      username: string;
+      emailVerified?: boolean;
+      createdAt: string;
+    };
+  };
+
+  const register = useCallback(async (email: string, username: string, password: string): Promise<LoginResult> => {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail || password.length < 8) {
+      return { success: false, message: 'Please provide a valid email and a password with at least 8 characters.' };
+    }
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, username, password }),
+      });
+      const data = (await res.json()) as registerApiResponse;
+      if (res.ok && data.success && data.user) {
+        const nextUser: User = {
+          id: data.user.id,
+          email: data.user.email,
+          username: data.user.username,
+          passwordHash: '',
+          emailVerified: data.user.emailVerified ?? false,
+          createdAt: data.user.createdAt,
+        };
+        dispatch({ type: 'ADD_USER', user: nextUser });
+        return { success: true, message: data.message };
+      } else if (data.message) {
+        return { success: false, message: data.message };
+      }
+    } catch {
+      // offline fallback
+    }
+
+    const existingUser = Object.values(state?.users ?? {}).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
+    if (existingUser) return { success: false, message: 'An account with that email already exists.' };
+
+    const userId = generateId();
+    const nextUser: User = {
+      id: userId,
+      email: normalizedEmail,
+      username: username.trim() || `user${userId.slice(0, 4)}`,
+      passwordHash: await hashPassword(password),
+      emailVerified: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    dispatch({ type: 'ADD_USER', user: nextUser });
+    return { success: true, message: 'Account created successfully. You are now signed in.' };
+  }, [state]);
+
+  const sendVerificationEmail = useCallback(async (userId?: string): Promise<{ success: boolean; message: string }> => {
+    const targetId = userId || state?.currentUserId;
+    if (!targetId) return { success: false, message: 'No user is currently signed in.' };
+
+    try {
+      const res = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: targetId }),
+      });
+      const data = (await res.json()) as { success: boolean; message: string };
+      if (res.ok && data.success) {
+        return { success: true, message: data.message };
+      }
+      return { success: false, message: data.message || 'Email verification failed.' };
+    } catch {
+      return { success: false, message: 'Unable to send the verification email. Please try again.' };
+    }
+  }, [state?.currentUserId]);
+
+  const logout = useCallback(() => {
+    dispatch({ type: 'SET_CURRENT_USER', currentUserId: null });
   }, []);
 
   const addColumn = useCallback((boardId: string, title: string) => {
@@ -323,12 +573,21 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  if (!state) return null; // hydrating
+  if (!state) return null;
 
   return (
     <BoardContext.Provider
       value={{
         state,
+        currentUser,
+        isBoardAccessible,
+        canManageBoard,
+        getBoardRole,
+        login,
+        register,
+        sendVerificationEmail,
+        logout,
+        inviteUserToBoard,
         addBoard,
         updateBoard,
         deleteBoard,

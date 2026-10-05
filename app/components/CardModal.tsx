@@ -8,6 +8,7 @@ interface Props {
   card: Card;
   columnId: string;
   onClose: () => void;
+  readOnly?: boolean;
 }
 
 const PRIORITIES: { value: Priority; label: string; color: string }[] = [
@@ -33,13 +34,13 @@ function toDateTimeLocalValue(value: string | null): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
-function toIsoDateTime(value: string): string | null {
+function toIsoDateTime(value: string | null): string | null {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export default function CardModal({ card, columnId, onClose }: Props) {
+export default function CardModal({ card, columnId, onClose, readOnly = false }: Props) {
   const { updateCard, deleteCard } = useBoardContext();
 
   const [title, setTitle]       = useState(card.title);
@@ -52,8 +53,10 @@ export default function CardModal({ card, columnId, onClose }: Props) {
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    titleRef.current?.focus();
-  }, []);
+    if (!readOnly) {
+      titleRef.current?.focus();
+    }
+  }, [readOnly]);
 
   // Close on Escape
   useEffect(() => {
@@ -361,26 +364,47 @@ export default function CardModal({ card, columnId, onClose }: Props) {
             </button>
           )}
 
-          <button
-            id="save-card-btn"
-            onClick={save}
-            style={{
-              padding: '10px 24px',
-              borderRadius: '10px',
-              border: 'none',
-              background: 'linear-gradient(135deg, var(--accent-600), var(--accent-400))',
-              color: '#fff',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 600,
-              boxShadow: '0 4px 16px var(--accent-glow)',
-              transition: 'opacity 0.15s ease',
-            }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.88')}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}
-          >
-            Save Changes
-          </button>
+          {!readOnly && (
+            <button
+              id="save-card-btn"
+              onClick={save}
+              style={{
+                padding: '10px 24px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'linear-gradient(135deg, var(--accent-600), var(--accent-400))',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 600,
+                boxShadow: '0 4px 16px var(--accent-glow)',
+                transition: 'opacity 0.15s ease',
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.88')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}
+            >
+              Save Changes
+            </button>
+          )}
+
+          {readOnly && (
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '10px 24px',
+                borderRadius: '10px',
+                border: '1px solid var(--border-medium)',
+                background: 'var(--bg-subtle)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 600,
+              }}
+            >
+              Close
+            </button>
+          )}
         </div>
       </div>
     </div>
