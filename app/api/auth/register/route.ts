@@ -95,6 +95,7 @@ export async function POST(request: Request) {
           message = `Account created successfully! A verification email was sent to ${newUser.email}.`;
         } catch (error) {
           console.error('Failed to create or send registration verification email:', error);
+          console.error('VERIFY EMAIL STACK:', error instanceof Error ? error.stack : String(error));
           message = 'Account created, but verification could not be started. Please request another email later.';
         }
       }
