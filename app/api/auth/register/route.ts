@@ -113,8 +113,10 @@ export async function POST(request: Request) {
       },
     });
   } catch (err) {
+    console.error("REGISTER ROUTE ERROR:", err);
+
     return NextResponse.json(
-      { success: false, message: 'Internal server error', details: String(err) },
+      { success: false, message: 'Internal server error', details: err instanceof Error ? err.stack : String(err) },
       { status: 500 }
     );
   }
