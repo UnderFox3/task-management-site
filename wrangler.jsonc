@@ -32,5 +32,18 @@
       "database_name": "itask-db",
       "database_id": "b2be3a74-929d-42f3-b215-9dd5c1f5c2ae"
     }
-  ]
+  ],
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
 }
