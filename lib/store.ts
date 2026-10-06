@@ -5,7 +5,7 @@ export const ADMIN_ID = 'usr_admin';
 export const JANE_ID = 'usr_jane';
 export const ALEX_ID = 'usr_alex';
 export const ADMIN_PASSWORD_HASH =
-  'pbkdf2_sha256$220000$841155d438abacf0da2570f42fb31886$8ddc3ad164022e7f04342553e88feedd2ff2576ba80980f622184880bc093323';
+  'pbkdf2_sha256$100000$841155d438abacf0da2570f42fb31886$8ddc3ad164022e7f04342553e88feedd2ff2576ba80980f622184880bc093323';
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 11);

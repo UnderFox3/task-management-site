@@ -72,14 +72,14 @@ export async function hashPassword(password: string): Promise<string> {
     {
       name: 'PBKDF2',
       salt,
-      iterations: 220000,
+      iterations: 100000,
       hash: 'SHA-256',
     },
     key,
     256
   );
 
-  return `${PBKDF2_PREFIX}$220000$${toHex(salt)}$${toHex(new Uint8Array(derived))}`;
+  return `${PBKDF2_PREFIX}$100000$${toHex(salt)}$${toHex(new Uint8Array(derived))}`;
 }
 
 export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
