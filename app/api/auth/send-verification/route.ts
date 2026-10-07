@@ -79,6 +79,11 @@ export async function POST(request: Request) {
     }
 
     const settings = getVerificationEmailSettings(env);
+    console.log("VERIFICATION EMAIL SETTINGS:", {
+      apiKeyExists: Boolean(settings.apiKey),
+      appUrl: settings.appUrl,
+      from: settings.from
+    });
     if (!settings.apiKey || !settings.appUrl) {
       return NextResponse.json(
         { success: false, message: 'Email verification is not configured on this server.' },
@@ -117,7 +122,9 @@ export async function POST(request: Request) {
     } catch (error) {
       console.error('Failed to send verification email:', error);
       return NextResponse.json(
-        { success: false, message: 'Unable to send the verification email right now. Please try again later.' },
+        { success: false, 
+          message: 'Unable to send the verification email right now. Please try again later.',
+          error: error instanceof Error ? error.message : String(error) },
         { status: 502 },
       );
     }

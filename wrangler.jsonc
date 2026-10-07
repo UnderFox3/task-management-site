@@ -46,4 +46,7 @@
       "persist": true
     }
   },
+  "vars": {
+    "APP_URL": "https://task-management-site.natan-aw95.workers.dev/"
+  },
 }
