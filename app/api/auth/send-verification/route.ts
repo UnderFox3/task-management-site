@@ -10,10 +10,16 @@ import {
 
 const RESEND_COOLDOWN_MS = 60 * 1000;
 
+
+
 export async function POST(request: Request) {
+  console.log("SEND VERIFICATION REQUEST RECEIVED");
+
   let body: { userId?: unknown };
+  
   try {
     body = await request.json() as { userId?: unknown };
+    console.log("SEND VERIFICATION BODY:", body);
   } catch {
     return NextResponse.json(
       { success: false, message: 'A valid JSON request body is required.' },
@@ -41,6 +47,16 @@ export async function POST(request: Request) {
         email_verified: number;
       }>();
 
+    console.log("USER LOOKUP RESULT:",
+      {
+        userId: user?.id,
+        found: !!user,
+        email: user?.email,
+        username: user?.username,
+        email_verified: user?.email_verified,
+      }
+    );
+    
     if (!user) {
       return NextResponse.json(
         { success: false, message: 'Account not found.' },
@@ -85,6 +101,12 @@ export async function POST(request: Request) {
     const token = await createVerificationTokenInD1(env.DB, user.id);
     const verificationUrl = createVerificationUrl(settings.appUrl, token);
     try {
+      console.log("ATTEMPTING TO SEND VERIFICATION EMAIL:", {
+        to: user.email,
+        username: user.username,
+        verificationUrl,
+      });
+      console.log("RESEND KEY EXISTS:", Boolean(settings.apiKey));
       await sendVerificationEmail(
         settings.apiKey,
         settings.from,
