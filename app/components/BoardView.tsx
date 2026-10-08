@@ -5,6 +5,8 @@ import type { Card, Priority } from '@/lib/types';
 import { useBoardContext } from '@/app/providers/BoardProvider';
 import Column from './Column';
 import CardModal from './CardModal';
+import InviteDialog from './InviteDialog';
+import MembersModal from './MembersModal';
 
 const PRIORITIES: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: '#22c55e' },
@@ -336,7 +338,7 @@ interface Props {
 }
 
 export default function BoardView({ boardId }: Props) {
-  const { state, addColumn, updateBoard, moveColumn, inviteUserToBoard, currentUser, canManageBoard, getBoardRole } = useBoardContext();
+  const { state, addColumn, updateBoard, moveColumn, canManageBoard, getBoardRole } = useBoardContext();
   const board = state.boards[boardId];
 
   const canAdmin = canManageBoard(boardId, 'owner');
@@ -349,9 +351,8 @@ export default function BoardView({ boardId }: Props) {
   const [newColTitle, setNewColTitle]       = useState('');
   const [selectedCard, setSelectedCard]     = useState<{ card: Card; columnId: string } | null>(null);
   const [createCardState, setCreateCardState] = useState<{ columnId: string } | null>(null);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer');
-  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
 
   if (!board) {
     return (
@@ -569,43 +570,26 @@ export default function BoardView({ boardId }: Props) {
             <span>{board.visibility === 'public' ? 'Public' : 'Private'}</span>
             {canAdmin && <span style={{ fontSize: '11px', opacity: 0.7 }}>⇄</span>}
           </button>
+          {canAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowMembersModal(true)}
+                style={{ border: '1px solid var(--border-medium)', borderRadius: '999px', padding: '7px 12px', background: 'var(--bg-subtle)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Manage Members
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowInviteDialog(true)}
+                style={{ border: 0, borderRadius: '999px', padding: '8px 13px', background: 'var(--accent-500)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Invite
+              </button>
+            </>
+          )}
         </div>
       </header>
-
-      {/* Invite Collaborator (for board owner) */}
-      {canAdmin && (
-        <div style={{ borderBottom: '1px solid var(--border-subtle)', padding: '14px 28px 18px', background: 'var(--bg-base)' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="Invite collaborator by email"
-              style={{ flex: '1 1 220px', minWidth: 180, padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-medium)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
-            />
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as 'editor' | 'viewer')}
-              style={{ padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-medium)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
-            >
-              <option value="editor">Editor</option>
-              <option value="viewer">Viewer</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => {
-                const result = inviteUserToBoard(boardId, inviteEmail, inviteRole);
-                setInviteMessage(result.message);
-                if (result.success) setInviteEmail('');
-              }}
-              style={{ padding: '9px 14px', borderRadius: '10px', border: 'none', background: 'var(--accent-500)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
-            >
-              Invite
-            </button>
-          </div>
-          {inviteMessage && <div style={{ marginTop: '10px', color: 'var(--text-secondary)', fontSize: '13px' }}>{inviteMessage}</div>}
-        </div>
-      )}
 
       {/* ── Columns Area ── */}
       <div
@@ -743,6 +727,8 @@ export default function BoardView({ boardId }: Props) {
           readOnly={!canEdit}
         />
       )}
+      {showInviteDialog && <InviteDialog boardId={boardId} onClose={() => setShowInviteDialog(false)} />}
+      {showMembersModal && <MembersModal boardId={boardId} onClose={() => setShowMembersModal(false)} />}
     </div>
   );
 }

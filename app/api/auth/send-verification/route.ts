@@ -3,7 +3,9 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { createVerificationTokenInD1 } from '@/lib/db';
 import {
   createVerificationUrl,
+  getEmailAppUrl,
   getVerificationEmailSettings,
+  isDevelopmentEmailMode,
   isDummyEmail,
   sendVerificationEmail,
 } from '@/lib/email-verification';
@@ -71,7 +73,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (isDummyEmail(user.email)) {
+    if (isDummyEmail(user.email) && !isDevelopmentEmailMode(request.url)) {
       return NextResponse.json(
         { success: false, message: 'Verification emails are disabled for demo email addresses.' },
         { status: 400 },
@@ -79,12 +81,13 @@ export async function POST(request: Request) {
     }
 
     const settings = getVerificationEmailSettings(env);
+    const appUrl = getEmailAppUrl(request, settings.appUrl);
     console.log("VERIFICATION EMAIL SETTINGS:", {
       apiKeyExists: Boolean(settings.apiKey),
-      appUrl: settings.appUrl,
+      appUrl,
       from: settings.from
     });
-    if (!settings.apiKey || !settings.appUrl) {
+    if (!appUrl) {
       return NextResponse.json(
         { success: false, message: 'Email verification is not configured on this server.' },
         { status: 503 },
@@ -104,21 +107,21 @@ export async function POST(request: Request) {
     }
 
     const token = await createVerificationTokenInD1(env.DB, user.id);
-    const verificationUrl = createVerificationUrl(settings.appUrl, token);
+    const verificationUrl = createVerificationUrl(appUrl, token);
     try {
-      console.log("ATTEMPTING TO SEND VERIFICATION EMAIL:", {
-        to: user.email,
-        username: user.username,
-        verificationUrl,
-      });
-      console.log("RESEND KEY EXISTS:", Boolean(settings.apiKey));
-      await sendVerificationEmail(
+      const emailSent = await sendVerificationEmail(
         settings.apiKey,
         settings.from,
         user.email,
         user.username,
         verificationUrl,
       );
+      return NextResponse.json({
+        success: true,
+        message: emailSent
+          ? `A verification email was sent to ${user.email}.`
+          : 'The development verification link was printed to the server console.',
+      });
     } catch (error) {
       console.error('Failed to send verification email:', error);
       return NextResponse.json(
@@ -129,10 +132,6 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: `A verification email was sent to ${user.email}.`,
-    });
   } catch (error) {
     console.error('Verification email request failed:', error);
     return NextResponse.json(

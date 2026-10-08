@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Route } from 'next';
 import { useBoardContext } from '@/app/providers/BoardProvider';
 
 export default function AuthScreen() {
   const { login, register, currentUser } = useBoardContext();
+  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -24,13 +27,21 @@ export default function AuthScreen() {
         const result = await login(email, password);
         setMessage(result.message);
         if (!result.success) return;
+        navigateAfterAuth();
         return;
       }
 
       const result = await register(email, username, password);
       setMessage(result.message);
+      if (result.success) navigateAfterAuth();
     } finally {
       setIsSubmitting(false);
+    }
+
+    function navigateAfterAuth() {
+      const requestedPath = new URLSearchParams(window.location.search).get('redirect');
+      const destination = requestedPath?.startsWith('/') && !requestedPath.startsWith('//') ? requestedPath : '/';
+      router.replace(destination as Route);
     }
   }
 

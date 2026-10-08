@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { findUserByEmailInD1, seedDatabaseIfEmpty } from '@/lib/db';
 import { normalizeEmail, verifyPassword } from '@/lib/rbac';
+import { createSession, sessionCookie } from '@/lib/server-auth';
 
 type LoginRequest = {
   email: string;
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const session = await createSession(env.DB, user.id);
     return NextResponse.json({
       success: true,
       message: `Welcome back, ${user.username}!`,
@@ -51,6 +53,8 @@ export async function POST(request: Request) {
         emailVerified: user.emailVerified ?? false,
         createdAt: user.createdAt,
       },
+    }, {
+      headers: { 'Set-Cookie': sessionCookie(session, request) },
     });
   } catch (err) {
     return NextResponse.json(

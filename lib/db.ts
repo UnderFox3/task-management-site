@@ -371,12 +371,10 @@ export async function saveFullStateToD1(db: D1Database, state: AppState): Promis
     `).bind(board.id, board.title, board.accent, board.ownerId, board.visibility, JSON.stringify(board.columnIds), board.createdAt));
   }
 
-  stmts.push(db.prepare('DELETE FROM board_members'));
   for (const board of Object.values(boards)) {
-    for (const member of Object.values(board.members)) {
-      stmts.push(db.prepare('INSERT INTO board_members (board_id, user_id, role, invited_at) VALUES (?, ?, ?, ?)')
-        .bind(board.id, member.userId, member.role, member.invitedAt));
-    }
+    stmts.push(db.prepare(
+      "INSERT OR IGNORE INTO board_members (board_id, user_id, role, invited_at) VALUES (?, ?, 'owner', ?)",
+    ).bind(board.id, board.ownerId, board.createdAt));
   }
 
   for (const [columnId, column] of Object.entries(columns)) {
@@ -404,12 +402,6 @@ export async function saveFullStateToD1(db: D1Database, state: AppState): Promis
     `).bind(cardId, cardToColumnId[cardId], card.title, card.description, card.priority, card.dueDate, card.completed ? 1 : 0, card.createdAt));
   }
 
-  stmts.push(db.prepare('DELETE FROM cards WHERE id NOT IN (SELECT value FROM json_each(?))')
-    .bind(JSON.stringify(Object.keys(cards))));
-  stmts.push(db.prepare('DELETE FROM columns WHERE id NOT IN (SELECT value FROM json_each(?))')
-    .bind(JSON.stringify(Object.keys(columns))));
-  stmts.push(db.prepare('DELETE FROM boards WHERE id NOT IN (SELECT value FROM json_each(?))')
-    .bind(JSON.stringify(Object.keys(boards))));
   stmts.push(db.prepare("INSERT INTO app_meta (key, val) VALUES ('board_order', ?) ON CONFLICT(key) DO UPDATE SET val = excluded.val")
     .bind(JSON.stringify(boardOrder)));
 

@@ -16,8 +16,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!currentUser && !isAuthRoute) {
-      const redirectUrl = pathname && pathname !== '/' ? `/login?redirect=${encodeURIComponent(pathname)}` : '/login';
+      const returnTo = typeof window === 'undefined' ? pathname : `${pathname}${window.location.search}`;
+      const redirectUrl = returnTo && returnTo !== '/' ? `/login?redirect=${encodeURIComponent(returnTo)}` : '/login';
       router.replace(redirectUrl as Route);
+    }
+    if (currentUser && isAuthRoute) {
+      const requestedPath = typeof window === 'undefined'
+        ? null
+        : new URLSearchParams(window.location.search).get('redirect');
+      const destination = requestedPath?.startsWith('/') && !requestedPath.startsWith('//') ? requestedPath : '/';
+      router.replace(destination as Route);
     }
   }, [currentUser, isAuthRoute, pathname, router]);
 
@@ -84,9 +92,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
             <button
               type="button"
-              onClick={() => {
-                logout();
-                router.push(`/login?redirect=${encodeURIComponent(pathname)}` as Route);
+              onClick={async () => {
+                try {
+                  await logout();
+                  router.push(`/login?redirect=${encodeURIComponent(pathname)}` as Route);
+                } catch (error) {
+                  console.error('Sign out failed:', error);
+                }
               }}
               style={{
                 padding: '10px 18px',

@@ -30,10 +30,25 @@ export function getVerificationEmailSettings(env: CloudflareEnv) {
   };
 }
 
+export function getEmailAppUrl(request: Request, configuredAppUrl?: string): string {
+  const requestUrl = new URL(request.url);
+  const isLocalRequest = isLocalUrl(requestUrl);
+
+  if (isLocalRequest) return requestUrl.origin;
+  return configuredAppUrl || requestUrl.origin;
+}
+
+export function isDevelopmentEmailMode(appUrl: string): boolean {
+  return process.env.NODE_ENV !== 'production' || isLocalUrl(new URL(appUrl));
+}
+
 export function createVerificationUrl(appUrl: string, token: string): string {
   const baseUrl = new URL(appUrl);
   if (
-    (baseUrl.protocol !== 'https:' && baseUrl.hostname !== 'localhost' && baseUrl.hostname !== '127.0.0.1') ||
+    (baseUrl.protocol !== 'https:' &&
+      baseUrl.hostname !== 'localhost' &&
+      baseUrl.hostname !== '127.0.0.1' &&
+      baseUrl.hostname !== '[::1]') ||
     baseUrl.username ||
     baseUrl.password
   ) {
@@ -46,12 +61,20 @@ export function createVerificationUrl(appUrl: string, token: string): string {
 }
 
 export async function sendVerificationEmail(
-  apiKey: string,
+  apiKey: string | undefined,
   from: string,
   to: string,
   username: string,
   verificationUrl: string,
-): Promise<void> {
+): Promise<boolean> {
+  if (isDevelopmentEmailMode(verificationUrl)) {
+    console.info('DEV VERIFICATION LINK:', verificationUrl);
+    return false;
+  }
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY is required to send verification emails in production.');
+  }
+
   const resend = new Resend(apiKey);
   const result = await resend.emails.send({
     from,
@@ -78,6 +101,17 @@ export async function sendVerificationEmail(
   if (result.error) {
     throw new Error(`Resend rejected the verification email: ${result.error.message}`);
   }
+  return true;
+}
+
+function isLocalUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  return hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    hostname === '0.0.0.0' ||
+    hostname.endsWith('.localhost');
 }
 
 function escapeHtml(value: string): string {

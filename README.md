@@ -39,14 +39,25 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Email verification and Cloudflare deployment
 
-Verification emails are sent through Resend. For local development, set these
-values in `.env.local`:
+For production, set these values in `.env.local` for local production builds,
+or as the corresponding Cloudflare Worker variables/secrets:
 
 ```env
 RESEND_API_KEY=re_your_api_key
 APP_URL=http://localhost:3000
 RESEND_FROM_EMAIL="Task Manager <onboarding@resend.dev>"
 ```
+
+In development, verification and invitation emails are not sent. The generated
+link is printed in the local server terminal with a `DEV VERIFICATION LINK` or
+`DEV INVITATION LINK` label, so it can be opened manually to complete the flow.
+This mode does not require a Resend API key. In production, the app sends
+through Resend and requires `RESEND_API_KEY`.
+
+The link host is selected from the request: a local loopback request uses its
+own origin (for example, `http://localhost:3000`) even when Wrangler's `APP_URL`
+is configured for the production site. Deployed requests use the configured
+`APP_URL`, keeping tokens in the environment/database that issued them.
 
 Demo users, boards, and cards are seeded only when `ENABLE_LOCAL_DEMO_SEED=true`
 is present in the local Cloudflare runtime environment. Copy `.dev.vars.example`
@@ -83,6 +94,19 @@ Windows when it creates the symlinks required for its Worker bundle.
    ```sh
    pnpm deploy:cloudflare
    ```
+
+## Board invitations and collaboration
+
+The collaboration migration creates hashed, expiring invitation tokens and
+server-side login sessions. Apply migrations to each D1 database before using
+invites or member-management actions. Invitation email delivery uses the
+existing `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `APP_URL` settings.
+
+Board invitations expire after seven days. Recipients must sign in using the
+invited email address before accepting. Owners can invite editors or viewers,
+change member roles, remove members, resend or revoke pending invitations, and
+transfer ownership. Editors can update board contents; viewers have read-only
+access. These permissions are checked by the API in addition to the UI.
 
 
 
