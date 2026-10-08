@@ -11,7 +11,7 @@ import React, {
 } from 'react';
 import type { AppState, Board, BoardAccessRole, Card, Column, Priority, User } from '@/lib/types';
 import { generateId, loadState, saveState } from '@/lib/store';
-import { canAccessBoard, normalizeEmail, verifyPassword, hashPassword, getEffectiveRole } from '@/lib/rbac';
+import { canAccessBoard, normalizeEmail, getEffectiveRole } from '@/lib/rbac';
 
 interface LoginResult {
   success: boolean;
@@ -24,11 +24,12 @@ interface BoardContextValue {
   isBoardAccessible: (boardId: string) => boolean;
   canManageBoard: (boardId: string, minimumRole?: BoardAccessRole) => boolean;
   getBoardRole: (boardId: string) => BoardAccessRole | null;
+  refreshState: () => Promise<void>;
   login: (email: string, password: string) => Promise<LoginResult>;
   register: (email: string, username: string, password: string) => Promise<LoginResult>;
   sendVerificationEmail: (userId?: string) => Promise<{ success: boolean; message: string }>;
-  logout: () => void;
-  inviteUserToBoard: (boardId: string, email: string, role?: BoardAccessRole) => { success: boolean; message: string };
+  logout: () => Promise<void>;
+  inviteUserToBoard: (boardId: string, email: string, role?: BoardAccessRole) => Promise<{ success: boolean; message: string }>;
   addBoard: (title: string, accent: string, visibility?: 'public' | 'private') => string;
   updateBoard: (boardId: string, changes: Partial<Pick<Board, 'title' | 'accent' | 'visibility'>>) => void;
   deleteBoard: (boardId: string) => void;
@@ -45,7 +46,6 @@ interface BoardContextValue {
 type Action =
   | { type: 'LOAD'; payload: AppState }
   | { type: 'SET_CURRENT_USER'; currentUserId: string | null }
-  | { type: 'ADD_USER'; user: User }
   | { type: 'ADD_BOARD'; board: Board }
   | { type: 'UPDATE_BOARD'; boardId: string; changes: Partial<Board> }
   | { type: 'DELETE_BOARD'; boardId: string }
@@ -56,8 +56,7 @@ type Action =
   | { type: 'UPDATE_CARD'; cardId: string; changes: Partial<Card> }
   | { type: 'DELETE_CARD'; columnId: string; cardId: string }
   | { type: 'MOVE_COLUMN'; boardId: string; fromColumnId: string; toIndex: number }
-  | { type: 'MOVE_CARD'; cardId: string; fromColumnId: string; toColumnId: string; toIndex: number }
-  | { type: 'INVITE_USER'; boardId: string; userId: string; role: BoardAccessRole };
+  | { type: 'MOVE_CARD'; cardId: string; fromColumnId: string; toColumnId: string; toIndex: number };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -65,8 +64,6 @@ function reducer(state: AppState, action: Action): AppState {
       return action.payload;
     case 'SET_CURRENT_USER':
       return { ...state, currentUserId: action.currentUserId };
-    case 'ADD_USER':
-      return { ...state, users: { ...state.users, [action.user.id]: action.user }, currentUserId: action.user.id };
     case 'ADD_BOARD': {
       return {
         ...state,
@@ -229,27 +226,6 @@ function reducer(state: AppState, action: Action): AppState {
         },
       };
     }
-    case 'INVITE_USER': {
-      const board = state.boards[action.boardId];
-      if (!board) return state;
-      return {
-        ...state,
-        boards: {
-          ...state.boards,
-          [action.boardId]: {
-            ...board,
-            members: {
-              ...board.members,
-              [action.userId]: {
-                userId: action.userId,
-                role: action.role,
-                invitedAt: new Date().toISOString(),
-              },
-            },
-          },
-        },
-      };
-    }
     default:
       return state;
   }
@@ -261,25 +237,28 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, null as unknown as AppState);
   const serverStateLoaded = useRef(false);
 
+  const refreshState = useCallback(async () => {
+    const response = await fetch('/api/state');
+    if (!response.ok) throw new Error('Unable to refresh board data.');
+    const serverState = await response.json() as AppState;
+    if (!serverState || !serverState.boards) throw new Error('The server returned invalid board data.');
+    dispatch({ type: 'LOAD', payload: serverState });
+    saveState(serverState);
+    serverStateLoaded.current = true;
+  }, []);
+
   // Initialize from localStorage immediately, then fetch fresh SQLite state from /api/state
   useEffect(() => {
     const local = loadState();
     let active = true;
-    dispatch({ type: 'LOAD', payload: local });
+    dispatch({ type: 'LOAD', payload: { ...local, currentUserId: null } });
 
     fetch('/api/state')
       .then((res) => res.ok ? (res.json() as Promise<AppState>) : null)
       .then((serverState) => {
         if (active && serverState && serverState.boards) {
-          const currentId = local.currentUserId;
-          const authoritativeState: AppState = {
-            ...serverState,
-            currentUserId: currentId && serverState.users[currentId]
-              ? currentId
-              : serverState.currentUserId,
-          };
-          dispatch({ type: 'LOAD', payload: authoritativeState });
-          saveState(authoritativeState);
+          dispatch({ type: 'LOAD', payload: serverState });
+          saveState(serverState);
           serverStateLoaded.current = true;
         }
       })
@@ -296,14 +275,18 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!state) return;
     saveState(state);
-    if (!serverStateLoaded.current) return;
+    if (!state.currentUserId || !serverStateLoaded.current) return;
 
     const timer = setTimeout(() => {
       fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(state),
-      }).catch(() => { });
+      }).then((response) => {
+        if (!response.ok) console.error('Server rejected a board state update.');
+      }).catch((error: unknown) => {
+        console.error('Could not save board state:', error);
+      });
     }, 300);
 
     return () => clearTimeout(timer);
@@ -369,7 +352,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const inviteUserToBoard = useCallback((boardId: string, email: string, role: BoardAccessRole = 'viewer') => {
+  const inviteUserToBoard = useCallback(async (boardId: string, email: string, role: BoardAccessRole = 'viewer') => {
     const board = state?.boards[boardId];
     if (!board || !state.currentUserId) {
       return { success: false, message: 'You are not signed in.' };
@@ -380,14 +363,18 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       return { success: false, message: 'Only the board owner can invite collaborators.' };
     }
 
-    const normalizedEmail = normalizeEmail(email);
-    const user = Object.values(state.users).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
-    if (!user) {
-      return { success: false, message: 'No user found with that email address.' };
+    try {
+      const response = await fetch('/api/board/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId, email: normalizeEmail(email), role }),
+      });
+      const result = await response.json() as { success?: boolean; message?: string };
+      return { success: response.ok && Boolean(result.success), message: result.message ?? 'Unable to send invitation.' };
+    } catch (error) {
+      console.error('Invitation request failed:', error);
+      return { success: false, message: 'Unable to send the invitation. Please try again.' };
     }
-
-    dispatch({ type: 'INVITE_USER', boardId, userId: user.id, role });
-    return { success: true, message: `${user.username} has been invited as a ${role}.` };
   }, [state]);
 
   type loginApiResponse = {
@@ -413,32 +400,17 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       });
       const data = (await res.json()) as loginApiResponse;
       if (res.ok && data.success && data.user) {
-        const loggedInUser: User = {
-          id: data.user.id,
-          email: data.user.email,
-          username: data.user.username,
-          passwordHash: '',
-          emailVerified: data.user.emailVerified ?? false,
-          createdAt: data.user.createdAt,
-        };
-        dispatch({ type: 'ADD_USER', user: loggedInUser });
+        await refreshState();
         return { success: true, message: data.message };
       } else if (data && data.message) {
         return { success: false, message: data.message };
       }
-    } catch {
-      // offline fallback
+    } catch (error) {
+      console.error('Sign-in request failed:', error);
+      return { success: false, message: 'Unable to sign in. Please try again.' };
     }
-
-    const user = Object.values(state?.users ?? {}).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
-    if (!user) return { success: false, message: 'No account was found for that email.' };
-
-    const valid = await verifyPassword(password, user.passwordHash);
-    if (!valid) return { success: false, message: 'Incorrect password.' };
-
-    dispatch({ type: 'SET_CURRENT_USER', currentUserId: user.id });
-    return { success: true, message: `Welcome back, ${user.username}!` };
-  }, [state]);
+    return { success: false, message: 'Unable to sign in. Please try again.' };
+  }, [refreshState]);
 
   type registerApiResponse = {
     success: boolean;
@@ -466,39 +438,17 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       });
       const data = (await res.json()) as registerApiResponse;
       if (res.ok && data.success && data.user) {
-        const nextUser: User = {
-          id: data.user.id,
-          email: data.user.email,
-          username: data.user.username,
-          passwordHash: '',
-          emailVerified: data.user.emailVerified ?? false,
-          createdAt: data.user.createdAt,
-        };
-        dispatch({ type: 'ADD_USER', user: nextUser });
+        await refreshState();
         return { success: true, message: data.message };
       } else if (data.message) {
         return { success: false, message: data.message };
       }
-    } catch {
-      // offline fallback
+    } catch (error) {
+      console.error('Account creation request failed:', error);
+      return { success: false, message: 'Unable to create your account. Please try again.' };
     }
-
-    const existingUser = Object.values(state?.users ?? {}).find((candidate) => normalizeEmail(candidate.email) === normalizedEmail);
-    if (existingUser) return { success: false, message: 'An account with that email already exists.' };
-
-    const userId = generateId();
-    const nextUser: User = {
-      id: userId,
-      email: normalizedEmail,
-      username: username.trim() || `user${userId.slice(0, 4)}`,
-      passwordHash: await hashPassword(password),
-      emailVerified: false,
-      createdAt: new Date().toISOString(),
-    };
-
-    dispatch({ type: 'ADD_USER', user: nextUser });
-    return { success: true, message: 'Account created successfully. You are now signed in.' };
-  }, [state]);
+    return { success: false, message: 'Unable to create your account. Please try again.' };
+  }, [refreshState]);
 
   const sendVerificationEmail = useCallback(async (userId?: string): Promise<{ success: boolean; message: string }> => {
     const targetId = userId || state?.currentUserId;
@@ -520,7 +470,9 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state?.currentUserId]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const response = await fetch('/api/auth/logout', { method: 'POST' });
+    if (!response.ok) throw new Error('Unable to sign out.');
     dispatch({ type: 'SET_CURRENT_USER', currentUserId: null });
   }, []);
 
@@ -583,6 +535,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         isBoardAccessible,
         canManageBoard,
         getBoardRole,
+        refreshState,
         login,
         register,
         sendVerificationEmail,

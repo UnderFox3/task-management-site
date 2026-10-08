@@ -4,8 +4,10 @@ import { createVerificationTokenInD1, findUserByEmailInD1, insertUserInD1, seedD
 import { hashPassword, normalizeEmail } from '@/lib/rbac';
 import { generateId } from '@/lib/store';
 import type { User } from '@/lib/types';
+import { createSession, sessionCookie } from '@/lib/server-auth';
 import {
   createVerificationUrl,
+  getEmailAppUrl,
   getVerificationEmailSettings,
   isDummyEmail,
   sendVerificationEmail,
@@ -71,28 +73,31 @@ export async function POST(request: Request) {
     };
 
     await insertUserInD1(env.DB, newUser);
+    const session = await createSession(env.DB, newUser.id);
 
     let emailSent = false;
     let message: string;
-    if (isDummy) {
+    if (isDummy && process.env.NODE_ENV === 'production') {
       message = 'Account created with a demo email address. Verification emails are disabled for demo addresses.';
     } else {
       const settings = getVerificationEmailSettings(env);
-      if (!settings.apiKey || !settings.appUrl) {
+      const appUrl = getEmailAppUrl(request, settings.appUrl);
+      if (!appUrl) {
         message = 'Account created, but verification email is not configured. Please request an email again later.';
       } else {
         try {
           const token = await createVerificationTokenInD1(env.DB, newUser.id);
-          const verificationUrl = createVerificationUrl(settings.appUrl, token);
-          await sendVerificationEmail(
+          const verificationUrl = createVerificationUrl(appUrl, token);
+          emailSent = await sendVerificationEmail(
             settings.apiKey,
             settings.from,
             newUser.email,
             newUser.username,
             verificationUrl,
           );
-          emailSent = true;
-          message = `Account created successfully! A verification email was sent to ${newUser.email}.`;
+          message = emailSent
+            ? `Account created successfully! A verification email was sent to ${newUser.email}.`
+            : 'Account created. The development verification link was printed to the server console.';
         } catch (error) {
           console.error('Failed to create or send registration verification email:', error);
           console.error('VERIFY EMAIL STACK:', error instanceof Error ? error.stack : String(error));
@@ -112,6 +117,8 @@ export async function POST(request: Request) {
         emailVerified: false,
         createdAt: newUser.createdAt,
       },
+    }, {
+      headers: { 'Set-Cookie': sessionCookie(session, request) },
     });
   } catch (err) {
     console.error("REGISTER ROUTE ERROR:", err);
